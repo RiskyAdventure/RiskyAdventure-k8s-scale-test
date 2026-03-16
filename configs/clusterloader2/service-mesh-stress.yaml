@@ -1,0 +1,64 @@
+{{$NAMESPACES := DefaultParam .NAMESPACES "10"}}
+{{$SERVICES_PER_NS := DefaultParam .SERVICES_PER_NS "50"}}
+
+name: service-mesh-stress
+namespace:
+  number: {{$NAMESPACES}}
+  prefix: cl2-test
+tuningSets:
+  - name: Uniform1qps
+    qpsLoad:
+      qps: 1
+steps:
+  - name: Start measurements
+    measurements:
+      - Identifier: PodStartupLatency
+        Method: PodStartupLatency
+        Params:
+          action: start
+      - Identifier: APIResponsiveness
+        Method: APIResponsivenessPrometheusSimple
+        Params:
+          action: start
+      - Identifier: WaitForControlledPodsRunning
+        Method: WaitForControlledPodsRunning
+        Params:
+          action: start
+  - name: Create backing deployments
+    phases:
+      - namespaceRange:
+          min: 1
+          max: {{$NAMESPACES}}
+        replicasPerNamespace: {{$SERVICES_PER_NS}}
+        tuningSet: Uniform1qps
+        objectBundle:
+          - basename: svc-backend
+            objectTemplatePath: deployment.yaml
+            templateFillMap:
+              Replicas: 1
+  - name: Create services
+    phases:
+      - namespaceRange:
+          min: 1
+          max: {{$NAMESPACES}}
+        replicasPerNamespace: {{$SERVICES_PER_NS}}
+        tuningSet: Uniform1qps
+        objectBundle:
+          - basename: svc-backend
+            objectTemplatePath: service.yaml
+  - name: Wait for pods to be running
+    measurements:
+      - Identifier: WaitForControlledPodsRunning
+        Method: WaitForControlledPodsRunning
+        Params:
+          action: gather
+  - name: Gather measurements
+    measurements:
+      - Identifier: PodStartupLatency
+        Method: PodStartupLatency
+        Params:
+          action: gather
+      - Identifier: APIResponsiveness
+        Method: APIResponsivenessPrometheusSimple
+        Params:
+          action: gather

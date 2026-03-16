@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+.pytest_cache/
+*.egg-info/
+build/
+dist/
+.DS_Store
+observer.log
+kubectl-watch.log
+cl2-observer.log
+build.log

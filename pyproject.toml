@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "k8s-scale-test"
+version = "0.1.0"
+description = "Kubernetes performance and scale testing system"
+requires-python = ">=3.9"
+dependencies = [
+    "kubernetes>=28.1.0",
+    "boto3>=1.34.0",
+    "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "hypothesis>=6.92.0",
+    "pytest>=7.4.0",
+    "pytest-asyncio>=0.23.0",
+]
+
+[project.scripts]
+k8s-scale-test = "k8s_scale_test.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"

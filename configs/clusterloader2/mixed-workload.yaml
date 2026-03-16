@@ -1,0 +1,86 @@
+{{$NAMESPACES := DefaultParam .NAMESPACES "10"}}
+{{$DEPLOYMENTS_PER_NS := DefaultParam .DEPLOYMENTS_PER_NS "5"}}
+{{$POD_REPLICAS := DefaultParam .POD_REPLICAS "3"}}
+{{$SERVICES_PER_NS := DefaultParam .SERVICES_PER_NS "5"}}
+{{$CONFIGMAPS_PER_NS := DefaultParam .CONFIGMAPS_PER_NS "10"}}
+{{$SECRETS_PER_NS := DefaultParam .SECRETS_PER_NS "5"}}
+
+name: mixed-workload
+namespace:
+  number: {{$NAMESPACES}}
+  prefix: cl2-test
+tuningSets:
+  - name: Uniform300qps
+    qpsLoad:
+      qps: 300
+steps:
+  - name: Create deployments
+    phases:
+      - namespaceRange:
+          min: 1
+          max: {{$NAMESPACES}}
+        replicasPerNamespace: {{$DEPLOYMENTS_PER_NS}}
+        tuningSet: Uniform300qps
+        objectBundle:
+          - basename: test-deployment
+            objectTemplatePath: deployment.yaml
+            templateFillMap:
+              Replicas: 0
+  - name: Create services
+    phases:
+      - namespaceRange:
+          min: 1
+          max: {{$NAMESPACES}}
+        replicasPerNamespace: {{$SERVICES_PER_NS}}
+        tuningSet: Uniform300qps
+        objectBundle:
+          - basename: test-service
+            objectTemplatePath: service.yaml
+  - name: Create small configmaps
+    phases:
+      - namespaceRange:
+          min: 1
+          max: {{$NAMESPACES}}
+        replicasPerNamespace: {{$CONFIGMAPS_PER_NS}}
+        tuningSet: Uniform300qps
+        objectBundle:
+          - basename: test-configmap-1kb
+            objectTemplatePath: configmap.yaml
+            templateFillMap:
+              Data: "{{RandData 1024}}"
+  - name: Create medium configmaps
+    phases:
+      - namespaceRange:
+          min: 1
+          max: {{$NAMESPACES}}
+        replicasPerNamespace: {{$CONFIGMAPS_PER_NS}}
+        tuningSet: Uniform300qps
+        objectBundle:
+          - basename: test-configmap-10kb
+            objectTemplatePath: configmap.yaml
+            templateFillMap:
+              Data: "{{RandData 10240}}"
+  - name: Create large configmaps
+    phases:
+      - namespaceRange:
+          min: 1
+          max: {{$NAMESPACES}}
+        replicasPerNamespace: {{$CONFIGMAPS_PER_NS}}
+        tuningSet: Uniform300qps
+        objectBundle:
+          - basename: test-configmap-100kb
+            objectTemplatePath: configmap.yaml
+            templateFillMap:
+              Data: "{{RandData 102400}}"
+  - name: Create secrets
+    phases:
+      - namespaceRange:
+          min: 1
+          max: {{$NAMESPACES}}
+        replicasPerNamespace: {{$SECRETS_PER_NS}}
+        tuningSet: Uniform300qps
+        objectBundle:
+          - basename: test-secret
+            objectTemplatePath: secret.yaml
+            templateFillMap:
+              SecretData: "{{RandData 1024}}"
