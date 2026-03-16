@@ -1,0 +1,36 @@
+{
+  "test_status": {
+    "config_name": "mixed-workload",
+    "job_name": "cl2-mixed-workload",
+    "status": "Failed",
+    "duration_seconds": 887.373543,
+    "error_message": "Parse error: No PerfData JSON found in /var/folders/rq/w63hkc1x1831pgt_602kdrrw0000gr/T/cl2-results-qrfyygew"
+  },
+  "preload_plan": {
+    "target_pods": 30000,
+    "namespaces": 375,
+    "deployments_per_ns": 2,
+    "pod_replicas": 0,
+    "services_per_ns": 2,
+    "configmaps_per_ns": 26,
+    "secrets_per_ns": 80,
+    "total_deployments": 750,
+    "total_pods": 0,
+    "total_services": 750,
+    "total_configmaps": 29250,
+    "total_secrets": 30000,
+    "total_objects": 61125,
+    "actual_namespaces": 375,
+    "actual_deployments": 750,
+    "actual_pods": 0,
+    "actual_services": 750,
+    "actual_configmaps": 29625,
+    "actual_secrets": 30000,
+    "actual_total": 61500
+  },
+  "pod_startup_latencies": [],
+  "api_latencies": [],
+  "api_availability": null,
+  "scheduling_throughput": null,
+  "raw_results": {}
+}
