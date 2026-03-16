@@ -136,7 +136,7 @@ class TestConfig(_SerializableMixin):
     target_pods: int
     batch_size: int = 50
     batch_interval_seconds: float = 10.0
-    rate_drop_threshold_pct: float = 50.0
+    rate_drop_threshold_pct: float = 75.0
     pending_timeout_seconds: float = 120.0
     rolling_avg_window_seconds: float = 30.0
     kubeconfig: Optional[str] = None
@@ -155,6 +155,10 @@ class TestConfig(_SerializableMixin):
     cl2_timeout: float = 3600.0
     cl2_params: Optional[Dict[str, str]] = None
     hold_at_peak: int = 90
+    stressor_weights: Optional[Dict[str, float]] = None
+    cpu_limit_multiplier: float = 2.0
+    memory_limit_multiplier: float = 1.5
+    iperf3_server_ratio: int = 50
 
 
 # ---------------------------------------------------------------------------
@@ -187,6 +191,19 @@ class PodSizingRecommendation(_SerializableMixin):
     max_pods_by_cpu: int
     max_pods_by_memory: int
     effective_density_limit: int
+
+
+@dataclass
+class StressorSizing(_SerializableMixin):
+    cpu_request_millicores: int
+    memory_request_mi: int
+    pod_ceiling: int
+    instance_type: str
+    allocatable_cpu_millicores: int
+    allocatable_memory_mi: int
+    daemonset_count: int
+    cpu_limit_multiplier: float = 2.0
+    memory_limit_multiplier: float = 1.5
 
 
 @dataclass
@@ -259,6 +276,7 @@ class PreflightReport(_SerializableMixin):
     pod_sizing_recommendations: List[PodSizingRecommendation]
     max_achievable_pods: int
     decision: GoNoGoDecision
+    stressor_sizing: Optional[StressorSizing] = None
 
 
 # ---------------------------------------------------------------------------
@@ -413,6 +431,8 @@ class TestRunSummary(_SerializableMixin):
     findings: List[Finding]
     validity: RunValidity
     validity_reason: str
+    node_health_sweep: Optional[Dict] = None
+    karpenter_health: Optional[Dict] = None
 
 
 # ---------------------------------------------------------------------------
@@ -569,6 +589,8 @@ class DeploymentConfig(_SerializableMixin):
     tolerations: List[Dict[str, Any]]
     affinity: Dict[str, Any]
     source_path: str
+    role: Optional[str] = None
+    weight: Optional[float] = None
 
 
 @dataclass

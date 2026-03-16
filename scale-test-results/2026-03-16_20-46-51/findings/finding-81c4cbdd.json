@@ -1,0 +1,203 @@
+{
+  "finding_id": "finding-81c4cbdd",
+  "timestamp": "2026-03-16T21:10:08.795676+00:00",
+  "severity": "critical",
+  "symptom": "Ready rate 13.19/s dropped below threshold (rolling avg 45.45/s)",
+  "affected_resources": [
+    "ip-100-64-100-63.us-west-2.compute.internal",
+    "ip-192-168-125-125.us-west-2.compute.internal",
+    "ip-192-168-250-123.us-west-2.compute.internal",
+    "ip-100-64-127-176.us-west-2.compute.internal",
+    "alt-cz29w",
+    "alt-lvrwh",
+    "ip-100-64-155-110.us-west-2.compute.internal",
+    "ip-192-168-245-90.us-west-2.compute.internal",
+    "ip-100-64-86-88.us-west-2.compute.internal",
+    "ip-192-168-75-175.us-west-2.compute.internal",
+    "ip-192-168-238-176.us-west-2.compute.internal",
+    "ip-192-168-143-18.us-west-2.compute.internal",
+    "alt-tg2dx",
+    "alt-dmc8x",
+    "alt-vk95f",
+    "ip-100-64-51-150.us-west-2.compute.internal",
+    "ip-100-64-51-35.us-west-2.compute.internal",
+    "ip-192-168-241-211.us-west-2.compute.internal",
+    "ip-192-168-161-90.us-west-2.compute.internal",
+    "ip-100-64-51-54.us-west-2.compute.internal"
+  ],
+  "k8s_events": [
+    {
+      "timestamp": "2026-03-16T21:05:22+00:00",
+      "namespace": "default",
+      "involved_object_kind": "NodeClaim",
+      "involved_object_name": "alt-4d9k6",
+      "reason": "InsufficientCapacityError",
+      "message": "NodeClaim alt-4d9k6 event: creating instance, insufficient capacity, with fleet error(s), MaxSpotInstanceCountExceeded: Max spot instance count exceeded (aws-error-code=UnfulfillableCapacity, aws-operation-name=CreateFleet, aws-request-id=c6b2e3fa-9ca6-4280-802c-af4ea787bbf1, aws-service-name=EC2, aws-status-code=200)",
+      "event_type": "Warning",
+      "scaling_step": 0,
+      "count": 1
+    },
+    {
+      "timestamp": "2026-03-16T21:05:23+00:00",
+      "namespace": "default",
+      "involved_object_kind": "NodeClaim",
+      "involved_object_name": "alt-4d9k6",
+      "reason": "TerminationGracePeriodExpiring",
+      "message": "All pods will be deleted by 2026-03-16T21:05:32Z",
+      "event_type": "Warning",
+      "scaling_step": 0,
+      "count": 1
+    },
+    {
+      "timestamp": "2026-03-16T21:05:22+00:00",
+      "namespace": "default",
+      "involved_object_kind": "NodeClaim",
+      "involved_object_name": "alt-4w5xx",
+      "reason": "InsufficientCapacityError",
+      "message": "NodeClaim alt-4w5xx event: creating instance, insufficient capacity, with fleet error(s), MaxSpotInstanceCountExceeded: Max spot instance count exceeded (aws-error-code=UnfulfillableCapacity, aws-operation-name=CreateFleet, aws-request-id=c6b2e3fa-9ca6-4280-802c-af4ea787bbf1, aws-service-name=EC2, aws-status-code=200)",
+      "event_type": "Warning",
+      "scaling_step": 0,
+      "count": 1
+    },
+    {
+      "timestamp": "2026-03-16T21:05:23+00:00",
+      "namespace": "default",
+      "involved_object_kind": "NodeClaim",
+      "involved_object_name": "alt-4w5xx",
+      "reason": "TerminationGracePeriodExpiring",
+      "message": "All pods will be deleted by 2026-03-16T21:05:32Z",
+      "event_type": "Warning",
+      "scaling_step": 0,
+      "count": 1
+    },
+    {
+      "timestamp": "2026-03-16T21:05:22+00:00",
+      "namespace": "default",
+      "involved_object_kind": "NodeClaim",
+      "involved_object_name": "alt-56zkt",
+      "reason": "InsufficientCapacityError",
+      "message": "NodeClaim alt-56zkt event: creating instance, insufficient capacity, with fleet error(s), MaxSpotInstanceCountExceeded: Max spot instance count exceeded (aws-error-code=UnfulfillableCapacity, aws-operation-name=CreateFleet, aws-request-id=c6b2e3fa-9ca6-4280-802c-af4ea787bbf1, aws-service-name=EC2, aws-status-code=200)",
+      "event_type": "Warning",
+      "scaling_step": 0,
+      "count": 1
+    },
+    {
+      "timestamp": "2026-03-16T21:05:23+00:00",
+      "namespace": "default",
+      "involved_object_kind": "NodeClaim",
+      "involved_object_name": "alt-56zkt",
+      "reason": "TerminationGracePeriodExpiring",
+      "message": "All pods will be deleted by 2026-03-16T21:05:32Z",
+      "event_type": "Warning",
+      "scaling_step": 0,
+      "count": 1
+    },
+    {
+      "timestamp": "2026-03-16T21:05:09+00:00",
+      "namespace": "default",
+      "involved_object_kind": "NodeClaim",
+      "involved_object_name": "alt-5vv78",
+      "reason": "InsufficientCapacityError",
+      "message": "NodeClaim alt-5vv78 event: creating instance, insufficient capacity, with fleet error(s), UnfulfillableCapacity: Unable to fulfill capacity due to your request configuration. Please adjust your request and try again. (aws-error-code=UnfulfillableCapacity, aws-operation-name=CreateFleet, aws-request-id=e376ca17-493f-45a9-9251-...",
+      "event_type": "Warning",
+      "scaling_step": 0,
+      "count": 1
+    },
+    {
+      "timestamp": "2026-03-16T21:05:10+00:00",
+      "namespace": "default",
+      "involved_object_kind": "NodeClaim",
+      "involved_object_name": "alt-5vv78",
+      "reason": "TerminationGracePeriodExpiring",
+      "message": "All pods will be deleted by 2026-03-16T21:05:19Z",
+      "event_type": "Warning",
+      "scaling_step": 0,
+      "count": 1
+    },
+    {
+      "timestamp": "2026-03-16T21:05:23+00:00",
+      "namespace": "default",
+      "involved_object_kind": "NodeClaim",
+      "involved_object_name": "alt-97fg6",
+      "reason": "InsufficientCapacityError",
+      "message": "NodeClaim alt-97fg6 event: creating instance, insufficient capacity, with fleet error(s), InsufficientInstanceCapacity: We currently do not have sufficient i4i.8xlarge capacity in the Availability Zone you requested (us-west-2d). Our system will be working on provisioning additional capacity. You can currently get i4i.8xlarge...",
+      "event_type": "Warning",
+      "scaling_step": 0,
+      "count": 1
+    },
+    {
+      "timestamp": "2026-03-16T21:05:24+00:00",
+      "namespace": "default",
+      "involved_object_kind": "NodeClaim",
+      "involved_object_name": "alt-97fg6",
+      "reason": "TerminationGracePeriodExpiring",
+      "message": "All pods will be deleted by 2026-03-16T21:05:33Z",
+      "event_type": "Warning",
+      "scaling_step": 0,
+      "count": 1
+    },
+    {
+      "timestamp": "2026-03-16T21:06:21+00:00",
+      "namespace": "default",
+      "involved_object_kind": "Node",
+      "involved_object_name": "ip-100-64-100-63.us-west-2.compute.internal",
+      "reason": "InvalidDiskCapacity",
+      "message": "invalid capacity 0 on image filesystem",
+      "event_type": "Warning",
+      "scaling_step": 0,
+      "count": 1
+    },
+    {
+      "timestamp": "2026-03-16T21:06:21+00:00",
+      "namespace": "default",
+      "involved_object_kind": "Node",
+      "involved_object_name": "ip-100-64-103-177.us-west-2.compute.internal",
+      "reason": "InvalidDiskCapacity",
+      "message": "invalid capacity 0 on image filesystem",
+      "event_type": "Warning",
+      "scaling_step": 0,
+      "count": 1
+    },
+    {
+      "timestamp": "2026-03-16T21:05:41+00:00",
+      "namespace": "default",
+      "involved_object_kind": "Node",
+      "involved_object_name": "ip-100-64-106-226.us-west-2.compute.internal",
+      "reason": "InvalidDiskCapacity",
+      "message": "invalid capacity 0 on image filesystem",
+      "event_type": "Warning",
+      "scaling_step": 0,
+      "count": 1
+    },
+    {
+      "timestamp": "2026-03-16T21:06:21+00:00",
+      "namespace": "default",
+      "involved_object_kind": "Node",
+      "involved_object_name": "ip-100-64-107-11.us-west-2.compute.internal",
+      "reason": "InvalidDiskCapacity",
+      "message": "invalid capacity 0 on image filesystem",
+      "event_type": "Warning",
+      "scaling_step": 0,
+      "count": 1
+    },
+    {
+      "timestamp": "2026-03-16T21:06:20+00:00",
+      "namespace": "default",
+      "involved_object_kind": "Node",
+      "involved_object_name": "ip-100-64-107-140.us-west-2.compute.internal",
+      "reason": "InvalidDiskCapacity",
+      "message": "invalid capacity 0 on image filesystem",
+      "event_type": "Warning",
+      "scaling_step": 0,
+      "count": 1
+    }
+  ],
+  "node_metrics": [],
+  "node_diagnostics": [],
+  "evidence_references": [
+    "pods:pending=0,creating=0",
+    "warnings:InvalidDiskCapacity=200,InsufficientCapacityError=62,TerminationGracePeriodExpiring=62"
+  ],
+  "root_cause": "InsufficientCapacityError x62 \u2014 Karpenter cannot provision nodes (spot exhaustion or NodePool limit reached); TerminationGracePeriodExpiring x62 \u2014 failed nodeclaim cleanup",
+  "resolved": true
+}

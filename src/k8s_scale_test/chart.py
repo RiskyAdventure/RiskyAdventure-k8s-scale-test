@@ -347,7 +347,6 @@ const ready = {json.dumps(ready_counts)};
 const pending = {json.dumps(pending_counts)};
 const total = {json.dumps(total_pods)};
 const rateData = ts.map((t, i) => ({{x: t, y: rates[i]}}));
-const rollingData = ts.map((t, i) => ({{x: t, y: rolling[i]}}));
 const readyData = ts.map((t, i) => ({{x: t, y: ready[i]}}));
 const pendingData = ts.map((t, i) => ({{x: t, y: pending[i]}}));
 const totalData = ts.map((t, i) => ({{x: t, y: total[i]}}));
@@ -364,8 +363,7 @@ new Chart(document.getElementById('rateChart'), {
       { label: 'Ready Rate (pods/sec)', data: rateData, borderColor: '#e94560',
         borderWidth: 2, pointBackgroundColor: rateColors, pointRadius: rateRadii,
         showLine: true, fill: false, tension: 0.1 },
-      { label: 'Rolling Avg', data: rollingData, borderColor: '#0f3460',
-        borderWidth: 2, pointRadius: 0, showLine: true, borderDash: [5,3], fill: false },
+
     ]
   },
   options: {

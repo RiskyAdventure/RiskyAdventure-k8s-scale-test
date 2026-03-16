@@ -1,0 +1,455 @@
+{
+  "run_id": "2026-03-16_20-46-51",
+  "start_time": "2026-03-16T20:46:51.676890+00:00",
+  "end_time": "2026-03-16T21:15:20.115574+00:00",
+  "duration_seconds": 1708.438684,
+  "config": {
+    "target_pods": 10000,
+    "batch_size": 50,
+    "batch_interval_seconds": 10.0,
+    "rate_drop_threshold_pct": 50.0,
+    "pending_timeout_seconds": 1800.0,
+    "rolling_avg_window_seconds": 30.0,
+    "kubeconfig": null,
+    "aws_profile": null,
+    "aws_endpoint_url": "https://api.beta.us-west-2.wesley.amazonaws.com",
+    "flux_repo_path": "./flux2",
+    "output_dir": "./scale-test-results",
+    "prometheus_url": null,
+    "event_time_window_minutes": 5,
+    "ssm_log_lines": 500,
+    "ssm_journal_minutes": 10,
+    "auto_approve": true,
+    "exclude_apps": [],
+    "include_apps": [],
+    "cl2_preload": null,
+    "cl2_timeout": 3600.0,
+    "cl2_params": null,
+    "hold_at_peak": 120,
+    "stressor_weights": {
+      "cpu-stress-test": 0.3,
+      "memory-stress-test": 0.3,
+      "io-stress-test": 0.2,
+      "iperf3-client": 0.1,
+      "sysctl-connection-test": 0.1
+    },
+    "cpu_limit_multiplier": 2.0,
+    "memory_limit_multiplier": 1.5,
+    "iperf3_server_ratio": 50
+  },
+  "preflight": {
+    "timestamp": "2026-03-16T20:46:55.750659+00:00",
+    "config": {
+      "target_pods": 10000,
+      "batch_size": 50,
+      "batch_interval_seconds": 10.0,
+      "rate_drop_threshold_pct": 50.0,
+      "pending_timeout_seconds": 1800.0,
+      "rolling_avg_window_seconds": 30.0,
+      "kubeconfig": null,
+      "aws_profile": null,
+      "aws_endpoint_url": "https://api.beta.us-west-2.wesley.amazonaws.com",
+      "flux_repo_path": "./flux2",
+      "output_dir": "./scale-test-results",
+      "prometheus_url": null,
+      "event_time_window_minutes": 5,
+      "ssm_log_lines": 500,
+      "ssm_journal_minutes": 10,
+      "auto_approve": true,
+      "exclude_apps": [],
+      "include_apps": [],
+      "cl2_preload": null,
+      "cl2_timeout": 3600.0,
+      "cl2_params": null,
+      "hold_at_peak": 120,
+      "stressor_weights": {
+        "cpu-stress-test": 0.3,
+        "memory-stress-test": 0.3,
+        "io-stress-test": 0.2,
+        "iperf3-client": 0.1,
+        "sysctl-connection-test": 0.1
+      },
+      "cpu_limit_multiplier": 2.0,
+      "memory_limit_multiplier": 1.5,
+      "iperf3_server_ratio": 50
+    },
+    "ec2_quotas": {
+      "current_vcpu_usage": 0,
+      "vcpu_quota": 0,
+      "headroom_vcpus": 0,
+      "usage_pct": 0.0
+    },
+    "subnet_ips": [],
+    "total_available_ips": 0,
+    "nodepool_capacities": [
+      {
+        "name": "alt",
+        "instance_types": [
+          "i8i.8xlarge",
+          "i4i.8xlarge"
+        ],
+        "vcpus_per_instance": {},
+        "max_nodes_per_type": {},
+        "max_pods_per_type": {},
+        "total_max_pods": 0
+      },
+      {
+        "name": "prod",
+        "instance_types": [
+          "c7g.2xlarge",
+          "m7g.2xlarge",
+          "m7g.4xlarge",
+          "r7g.4xlarge",
+          "r7g.8xlarge",
+          "r7g.16xlarge"
+        ],
+        "vcpus_per_instance": {},
+        "max_nodes_per_type": {},
+        "max_pods_per_type": {},
+        "total_max_pods": 0
+      }
+    ],
+    "pods_per_node_breakdowns": [
+      {
+        "instance_type": "i8i.8xlarge",
+        "nodepool_name": "alt",
+        "total_cores": 32,
+        "max_pods_setting": 150,
+        "pods_per_core_setting": 0,
+        "pods_per_core_limit": 150,
+        "effective_max_pods": 150,
+        "system_reserved_cpu": "0m",
+        "kube_reserved_cpu": "0m",
+        "system_reserved_memory": "0Mi",
+        "kube_reserved_memory": "0Mi",
+        "eviction_hard_memory": "5%"
+      },
+      {
+        "instance_type": "i4i.8xlarge",
+        "nodepool_name": "alt",
+        "total_cores": 32,
+        "max_pods_setting": 150,
+        "pods_per_core_setting": 0,
+        "pods_per_core_limit": 150,
+        "effective_max_pods": 150,
+        "system_reserved_cpu": "0m",
+        "kube_reserved_cpu": "0m",
+        "system_reserved_memory": "0Mi",
+        "kube_reserved_memory": "0Mi",
+        "eviction_hard_memory": "5%"
+      },
+      {
+        "instance_type": "c7g.2xlarge",
+        "nodepool_name": "prod",
+        "total_cores": 8,
+        "max_pods_setting": 250,
+        "pods_per_core_setting": 2,
+        "pods_per_core_limit": 16,
+        "effective_max_pods": 16,
+        "system_reserved_cpu": "1",
+        "kube_reserved_cpu": "1",
+        "system_reserved_memory": "2Gi",
+        "kube_reserved_memory": "2Gi",
+        "eviction_hard_memory": "5%"
+      },
+      {
+        "instance_type": "m7g.2xlarge",
+        "nodepool_name": "prod",
+        "total_cores": 8,
+        "max_pods_setting": 250,
+        "pods_per_core_setting": 2,
+        "pods_per_core_limit": 16,
+        "effective_max_pods": 16,
+        "system_reserved_cpu": "1",
+        "kube_reserved_cpu": "1",
+        "system_reserved_memory": "2Gi",
+        "kube_reserved_memory": "2Gi",
+        "eviction_hard_memory": "5%"
+      },
+      {
+        "instance_type": "r7g.4xlarge",
+        "nodepool_name": "prod",
+        "total_cores": 16,
+        "max_pods_setting": 250,
+        "pods_per_core_setting": 2,
+        "pods_per_core_limit": 32,
+        "effective_max_pods": 32,
+        "system_reserved_cpu": "1",
+        "kube_reserved_cpu": "1",
+        "system_reserved_memory": "2Gi",
+        "kube_reserved_memory": "2Gi",
+        "eviction_hard_memory": "5%"
+      },
+      {
+        "instance_type": "r7g.8xlarge",
+        "nodepool_name": "prod",
+        "total_cores": 32,
+        "max_pods_setting": 250,
+        "pods_per_core_setting": 2,
+        "pods_per_core_limit": 64,
+        "effective_max_pods": 64,
+        "system_reserved_cpu": "1",
+        "kube_reserved_cpu": "1",
+        "system_reserved_memory": "2Gi",
+        "kube_reserved_memory": "2Gi",
+        "eviction_hard_memory": "5%"
+      }
+    ],
+    "pod_sizing_recommendations": [
+      {
+        "instance_type": "i8i.8xlarge",
+        "allocatable_cpu_millicores": 32000,
+        "allocatable_memory_mi": 262144,
+        "recommended_cpu_request": "213m",
+        "recommended_memory_request": "1747Mi",
+        "max_pods_by_cpu": 150,
+        "max_pods_by_memory": 150,
+        "effective_density_limit": 150
+      },
+      {
+        "instance_type": "i4i.8xlarge",
+        "allocatable_cpu_millicores": 32000,
+        "allocatable_memory_mi": 262144,
+        "recommended_cpu_request": "213m",
+        "recommended_memory_request": "1747Mi",
+        "max_pods_by_cpu": 150,
+        "max_pods_by_memory": 150,
+        "effective_density_limit": 150
+      },
+      {
+        "instance_type": "c7g.2xlarge",
+        "allocatable_cpu_millicores": 6000,
+        "allocatable_memory_mi": 12288,
+        "recommended_cpu_request": "375m",
+        "recommended_memory_request": "768Mi",
+        "max_pods_by_cpu": 16,
+        "max_pods_by_memory": 16,
+        "effective_density_limit": 16
+      },
+      {
+        "instance_type": "m7g.2xlarge",
+        "allocatable_cpu_millicores": 6000,
+        "allocatable_memory_mi": 28672,
+        "recommended_cpu_request": "375m",
+        "recommended_memory_request": "1792Mi",
+        "max_pods_by_cpu": 16,
+        "max_pods_by_memory": 16,
+        "effective_density_limit": 16
+      },
+      {
+        "instance_type": "r7g.4xlarge",
+        "allocatable_cpu_millicores": 14000,
+        "allocatable_memory_mi": 126976,
+        "recommended_cpu_request": "437m",
+        "recommended_memory_request": "3968Mi",
+        "max_pods_by_cpu": 32,
+        "max_pods_by_memory": 32,
+        "effective_density_limit": 32
+      },
+      {
+        "instance_type": "r7g.8xlarge",
+        "allocatable_cpu_millicores": 30000,
+        "allocatable_memory_mi": 258048,
+        "recommended_cpu_request": "468m",
+        "recommended_memory_request": "4032Mi",
+        "max_pods_by_cpu": 64,
+        "max_pods_by_memory": 64,
+        "effective_density_limit": 64
+      }
+    ],
+    "max_achievable_pods": 0,
+    "decision": {
+      "decision": "no_go",
+      "constraints_checked": [
+        "subnet_ips",
+        "vcpu_quota",
+        "nodepool_cpu",
+        "pod_ceiling"
+      ],
+      "blocking_constraints": [
+        "Need 10000 IPs, only 0 available (shortfall: 10000)"
+      ],
+      "recommendations": [
+        "Add secondary CIDR blocks to VPC subnets"
+      ]
+    },
+    "stressor_sizing": {
+      "cpu_request_millicores": 226,
+      "memory_request_mi": 1859,
+      "pod_ceiling": 141,
+      "instance_type": "i8i.8xlarge",
+      "allocatable_cpu_millicores": 32000,
+      "allocatable_memory_mi": 262144,
+      "daemonset_count": 9,
+      "cpu_limit_multiplier": 2.0,
+      "memory_limit_multiplier": 1.5
+    }
+  },
+  "scaling_result": {
+    "steps": [
+      {
+        "step_number": 1,
+        "timestamp": "2026-03-16T20:52:17.890413+00:00",
+        "target_replicas": 10000,
+        "actual_ready": 10200,
+        "actual_pending": 0,
+        "duration_seconds": 1167.212926
+      }
+    ],
+    "total_pods_requested": 10000,
+    "total_pods_ready": 10200,
+    "total_nodes_provisioned": 244,
+    "peak_ready_rate": 0.0,
+    "completed": true,
+    "halt_reason": null
+  },
+  "peak_pod_count": 10200,
+  "peak_ready_rate": 0.0,
+  "total_nodes_provisioned": 244,
+  "anomaly_count": 1,
+  "findings": [
+    {
+      "finding_id": "finding-dff06c94",
+      "timestamp": "2026-03-16T21:00:03.929740+00:00",
+      "severity": "critical",
+      "symptom": "Diagnostics: 200 pods pending",
+      "affected_resources": [
+        "iperf3-server-7cf5f5465f-kdqcc",
+        "iperf3-server-7cf5f5465f-lrxv7",
+        "iperf3-server-7cf5f5465f-qmcrq",
+        "iperf3-server-7cf5f5465f-nhbt5",
+        "iperf3-server-7cf5f5465f-w925v",
+        "iperf3-server-7cf5f5465f-4wdvq",
+        "iperf3-server-7cf5f5465f-vvslj",
+        "iperf3-server-7cf5f5465f-xqx6b",
+        "iperf3-server-7cf5f5465f-5l7ng",
+        "iperf3-server-7cf5f5465f-5t9pq",
+        "iperf3-server-7cf5f5465f-fs7p5",
+        "iperf3-server-7cf5f5465f-sncl9",
+        "iperf3-server-7cf5f5465f-sz2hz",
+        "iperf3-server-7cf5f5465f-4fnct",
+        "iperf3-server-7cf5f5465f-tpd8s",
+        "iperf3-server-7cf5f5465f-v8c4g",
+        "iperf3-server-7cf5f5465f-74wjb",
+        "iperf3-server-7cf5f5465f-gjcj9",
+        "iperf3-server-7cf5f5465f-zq9nv",
+        "iperf3-server-7cf5f5465f-dn2sj",
+        "ip-100-64-87-10.us-west-2.compute.internal"
+      ],
+      "k8s_events": [
+        {
+          "timestamp": "2026-03-16T20:59:55.202655+00:00",
+          "namespace": "stress-test",
+          "involved_object_kind": "Pod",
+          "involved_object_name": "iperf3-server-7cf5f5465f-2mxwj",
+          "reason": "FailedScheduling",
+          "message": "0/3 nodes are available: 1 Too many pods, 2 node(s) didn't match Pod's node affinity/selector. no new claims to deallocate, preemption: 0/3 nodes are available: 1 No preemption victims found for incoming pod, 2 Preemption is not helpful for scheduling.",
+          "event_type": "Warning",
+          "scaling_step": 0,
+          "count": 1
+        },
+        {
+          "timestamp": "2026-03-16T20:59:55.134551+00:00",
+          "namespace": "stress-test",
+          "involved_object_kind": "Pod",
+          "involved_object_name": "iperf3-server-7cf5f5465f-4fnct",
+          "reason": "FailedScheduling",
+          "message": "0/3 nodes are available: 1 Too many pods, 2 node(s) didn't match Pod's node affinity/selector. no new claims to deallocate, preemption: 0/3 nodes are available: 1 No preemption victims found for incoming pod, 2 Preemption is not helpful for scheduling.",
+          "event_type": "Warning",
+          "scaling_step": 0,
+          "count": 1
+        },
+        {
+          "timestamp": "2026-03-16T20:59:55.063142+00:00",
+          "namespace": "stress-test",
+          "involved_object_kind": "Pod",
+          "involved_object_name": "iperf3-server-7cf5f5465f-4m99q",
+          "reason": "FailedScheduling",
+          "message": "0/3 nodes are available: 1 Too many pods, 2 node(s) didn't match Pod's node affinity/selector. no new claims to deallocate, preemption: 0/3 nodes are available: 1 No preemption victims found for incoming pod, 2 Preemption is not helpful for scheduling.",
+          "event_type": "Warning",
+          "scaling_step": 0,
+          "count": 1
+        },
+        {
+          "timestamp": "2026-03-16T20:59:55.011553+00:00",
+          "namespace": "stress-test",
+          "involved_object_kind": "Pod",
+          "involved_object_name": "iperf3-server-7cf5f5465f-4v7nj",
+          "reason": "FailedScheduling",
+          "message": "0/3 nodes are available: 1 Too many pods, 2 node(s) didn't match Pod's node affinity/selector. no new claims to deallocate, preemption: 0/3 nodes are available: 1 No preemption victims found for incoming pod, 2 Preemption is not helpful for scheduling.",
+          "event_type": "Warning",
+          "scaling_step": 0,
+          "count": 1
+        },
+        {
+          "timestamp": "2026-03-16T20:59:55.271262+00:00",
+          "namespace": "stress-test",
+          "involved_object_kind": "Pod",
+          "involved_object_name": "iperf3-server-7cf5f5465f-4wdvq",
+          "reason": "FailedScheduling",
+          "message": "0/3 nodes are available: 1 Too many pods, 2 node(s) didn't match Pod's node affinity/selector. no new claims to deallocate, preemption: 0/3 nodes are available: 1 No preemption victims found for incoming pod, 2 Preemption is not helpful for scheduling.",
+          "event_type": "Warning",
+          "scaling_step": 0,
+          "count": 1
+        }
+      ],
+      "node_metrics": [],
+      "node_diagnostics": [
+        {
+          "node_name": "ip-100-64-87-10.us-west-2.compute.internal",
+          "instance_id": "i-0b0f56d6eeffe8a25",
+          "collection_timestamp": "2026-03-16T21:00:03.929114+00:00",
+          "kubelet_logs": {
+            "instance_id": "i-0b0f56d6eeffe8a25",
+            "command": "journalctl -u kubelet --no-pager -n 500",
+            "command_id": "",
+            "status": "Failed",
+            "output": "",
+            "error": "send_command failed"
+          },
+          "containerd_logs": {
+            "instance_id": "i-0b0f56d6eeffe8a25",
+            "command": "journalctl -u containerd --no-pager -n 500",
+            "command_id": "",
+            "status": "Failed",
+            "output": "",
+            "error": "send_command failed"
+          },
+          "journal_kubelet": {
+            "instance_id": "i-0b0f56d6eeffe8a25",
+            "command": "journalctl -u kubelet --no-pager --since '10 minutes ago'",
+            "command_id": "",
+            "status": "Failed",
+            "output": "",
+            "error": "send_command failed"
+          },
+          "journal_containerd": {
+            "instance_id": "i-0b0f56d6eeffe8a25",
+            "command": "journalctl -u containerd --no-pager --since '10 minutes ago'",
+            "command_id": "",
+            "status": "Failed",
+            "output": "",
+            "error": "send_command failed"
+          },
+          "resource_utilization": {
+            "instance_id": "i-0b0f56d6eeffe8a25",
+            "command": "top -bn1 | head -20; echo '---'; df -h; echo '---'; free -h",
+            "command_id": "",
+            "status": "Failed",
+            "output": "",
+            "error": "send_command failed"
+          }
+        }
+      ],
+      "evidence_references": [
+        "pods:pending=200,creating=0",
+        "warnings:FailedScheduling=61",
+        "ssm_diags:1"
+      ],
+      "root_cause": "200 pods unschedulable",
+      "resolved": true
+    }
+  ],
+  "validity": "valid",
+  "validity_reason": "success"
+}

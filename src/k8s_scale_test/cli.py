@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import json
 import logging
 import sys
 
@@ -36,6 +37,14 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
                    help="Comma-separated CL2 template params (e.g., REPLICAS=100,SERVICES=50)")
     p.add_argument("--hold-at-peak", type=int, default=90,
                    help="Seconds to hold at peak pod count before cleanup (default: 90)")
+    p.add_argument("--stressor-weights", type=str, default=None,
+                   help='JSON dict of deployment name to weight, e.g. \'{"cpu-stress-test": 0.4, "memory-stress-test": 0.3, "io-stress-test": 0.2, "iperf3-client": 0.1}\'')
+    p.add_argument("--cpu-limit-multiplier", type=float, default=2.0,
+                   help="CPU limit as multiplier of request (default: 2.0)")
+    p.add_argument("--memory-limit-multiplier", type=float, default=1.5,
+                   help="Memory limit as multiplier of request (default: 1.5)")
+    p.add_argument("--iperf3-server-ratio", type=int, default=50,
+                   help="Number of client pods per iperf3 server (default: 50)")
     return p.parse_args(argv)
 
 
@@ -62,6 +71,10 @@ def main(argv: list[str] | None = None) -> None:
                 k, v = pair.split("=", 1)
                 cl2_params[k.strip()] = v.strip()
 
+    stressor_weights = None
+    if args.stressor_weights:
+        stressor_weights = json.loads(args.stressor_weights)
+
     config = TestConfig(
         target_pods=args.target_pods,
         pending_timeout_seconds=args.pending_timeout,
@@ -77,6 +90,10 @@ def main(argv: list[str] | None = None) -> None:
         cl2_timeout=args.cl2_timeout,
         cl2_params=cl2_params,
         hold_at_peak=args.hold_at_peak,
+        stressor_weights=stressor_weights,
+        cpu_limit_multiplier=args.cpu_limit_multiplier,
+        memory_limit_multiplier=args.memory_limit_multiplier,
+        iperf3_server_ratio=args.iperf3_server_ratio,
     )
 
     evidence_store = EvidenceStore(config.output_dir)

@@ -9,3 +9,21 @@ observer.log
 kubectl-watch.log
 cl2-observer.log
 build.log
+
+# Flux repo has its own git — only track CL2 configs
+flux2/.git/
+flux2/cluster/
+flux2/clusters/
+flux2/infrastructure/
+flux2/apps/base/apache/
+flux2/apps/base/dex/
+flux2/apps/base/dex-k8s-authenticator/
+flux2/apps/base/deploytest/
+flux2/apps/base/efs-app/
+flux2/apps/base/iam/
+flux2/apps/base/iperf3/
+flux2/apps/base/kafka/
+flux2/apps/base/nginx/
+flux2/apps/base/spark/
+flux2/apps/base/stress-test/
+flux2/apps/base/ack-clusters/

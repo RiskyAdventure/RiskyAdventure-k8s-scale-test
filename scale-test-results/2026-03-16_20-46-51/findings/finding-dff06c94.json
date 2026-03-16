@@ -1,0 +1,141 @@
+{
+  "finding_id": "finding-dff06c94",
+  "timestamp": "2026-03-16T21:00:03.929740+00:00",
+  "severity": "critical",
+  "symptom": "Diagnostics: 200 pods pending",
+  "affected_resources": [
+    "iperf3-server-7cf5f5465f-kdqcc",
+    "iperf3-server-7cf5f5465f-lrxv7",
+    "iperf3-server-7cf5f5465f-qmcrq",
+    "iperf3-server-7cf5f5465f-nhbt5",
+    "iperf3-server-7cf5f5465f-w925v",
+    "iperf3-server-7cf5f5465f-4wdvq",
+    "iperf3-server-7cf5f5465f-vvslj",
+    "iperf3-server-7cf5f5465f-xqx6b",
+    "iperf3-server-7cf5f5465f-5l7ng",
+    "iperf3-server-7cf5f5465f-5t9pq",
+    "iperf3-server-7cf5f5465f-fs7p5",
+    "iperf3-server-7cf5f5465f-sncl9",
+    "iperf3-server-7cf5f5465f-sz2hz",
+    "iperf3-server-7cf5f5465f-4fnct",
+    "iperf3-server-7cf5f5465f-tpd8s",
+    "iperf3-server-7cf5f5465f-v8c4g",
+    "iperf3-server-7cf5f5465f-74wjb",
+    "iperf3-server-7cf5f5465f-gjcj9",
+    "iperf3-server-7cf5f5465f-zq9nv",
+    "iperf3-server-7cf5f5465f-dn2sj",
+    "ip-100-64-87-10.us-west-2.compute.internal"
+  ],
+  "k8s_events": [
+    {
+      "timestamp": "2026-03-16T20:59:55.202655+00:00",
+      "namespace": "stress-test",
+      "involved_object_kind": "Pod",
+      "involved_object_name": "iperf3-server-7cf5f5465f-2mxwj",
+      "reason": "FailedScheduling",
+      "message": "0/3 nodes are available: 1 Too many pods, 2 node(s) didn't match Pod's node affinity/selector. no new claims to deallocate, preemption: 0/3 nodes are available: 1 No preemption victims found for incoming pod, 2 Preemption is not helpful for scheduling.",
+      "event_type": "Warning",
+      "scaling_step": 0,
+      "count": 1
+    },
+    {
+      "timestamp": "2026-03-16T20:59:55.134551+00:00",
+      "namespace": "stress-test",
+      "involved_object_kind": "Pod",
+      "involved_object_name": "iperf3-server-7cf5f5465f-4fnct",
+      "reason": "FailedScheduling",
+      "message": "0/3 nodes are available: 1 Too many pods, 2 node(s) didn't match Pod's node affinity/selector. no new claims to deallocate, preemption: 0/3 nodes are available: 1 No preemption victims found for incoming pod, 2 Preemption is not helpful for scheduling.",
+      "event_type": "Warning",
+      "scaling_step": 0,
+      "count": 1
+    },
+    {
+      "timestamp": "2026-03-16T20:59:55.063142+00:00",
+      "namespace": "stress-test",
+      "involved_object_kind": "Pod",
+      "involved_object_name": "iperf3-server-7cf5f5465f-4m99q",
+      "reason": "FailedScheduling",
+      "message": "0/3 nodes are available: 1 Too many pods, 2 node(s) didn't match Pod's node affinity/selector. no new claims to deallocate, preemption: 0/3 nodes are available: 1 No preemption victims found for incoming pod, 2 Preemption is not helpful for scheduling.",
+      "event_type": "Warning",
+      "scaling_step": 0,
+      "count": 1
+    },
+    {
+      "timestamp": "2026-03-16T20:59:55.011553+00:00",
+      "namespace": "stress-test",
+      "involved_object_kind": "Pod",
+      "involved_object_name": "iperf3-server-7cf5f5465f-4v7nj",
+      "reason": "FailedScheduling",
+      "message": "0/3 nodes are available: 1 Too many pods, 2 node(s) didn't match Pod's node affinity/selector. no new claims to deallocate, preemption: 0/3 nodes are available: 1 No preemption victims found for incoming pod, 2 Preemption is not helpful for scheduling.",
+      "event_type": "Warning",
+      "scaling_step": 0,
+      "count": 1
+    },
+    {
+      "timestamp": "2026-03-16T20:59:55.271262+00:00",
+      "namespace": "stress-test",
+      "involved_object_kind": "Pod",
+      "involved_object_name": "iperf3-server-7cf5f5465f-4wdvq",
+      "reason": "FailedScheduling",
+      "message": "0/3 nodes are available: 1 Too many pods, 2 node(s) didn't match Pod's node affinity/selector. no new claims to deallocate, preemption: 0/3 nodes are available: 1 No preemption victims found for incoming pod, 2 Preemption is not helpful for scheduling.",
+      "event_type": "Warning",
+      "scaling_step": 0,
+      "count": 1
+    }
+  ],
+  "node_metrics": [],
+  "node_diagnostics": [
+    {
+      "node_name": "ip-100-64-87-10.us-west-2.compute.internal",
+      "instance_id": "i-0b0f56d6eeffe8a25",
+      "collection_timestamp": "2026-03-16T21:00:03.929114+00:00",
+      "kubelet_logs": {
+        "instance_id": "i-0b0f56d6eeffe8a25",
+        "command": "journalctl -u kubelet --no-pager -n 500",
+        "command_id": "",
+        "status": "Failed",
+        "output": "",
+        "error": "send_command failed"
+      },
+      "containerd_logs": {
+        "instance_id": "i-0b0f56d6eeffe8a25",
+        "command": "journalctl -u containerd --no-pager -n 500",
+        "command_id": "",
+        "status": "Failed",
+        "output": "",
+        "error": "send_command failed"
+      },
+      "journal_kubelet": {
+        "instance_id": "i-0b0f56d6eeffe8a25",
+        "command": "journalctl -u kubelet --no-pager --since '10 minutes ago'",
+        "command_id": "",
+        "status": "Failed",
+        "output": "",
+        "error": "send_command failed"
+      },
+      "journal_containerd": {
+        "instance_id": "i-0b0f56d6eeffe8a25",
+        "command": "journalctl -u containerd --no-pager --since '10 minutes ago'",
+        "command_id": "",
+        "status": "Failed",
+        "output": "",
+        "error": "send_command failed"
+      },
+      "resource_utilization": {
+        "instance_id": "i-0b0f56d6eeffe8a25",
+        "command": "top -bn1 | head -20; echo '---'; df -h; echo '---'; free -h",
+        "command_id": "",
+        "status": "Failed",
+        "output": "",
+        "error": "send_command failed"
+      }
+    }
+  ],
+  "evidence_references": [
+    "pods:pending=200,creating=0",
+    "warnings:FailedScheduling=61",
+    "ssm_diags:1"
+  ],
+  "root_cause": "200 pods unschedulable",
+  "resolved": true
+}

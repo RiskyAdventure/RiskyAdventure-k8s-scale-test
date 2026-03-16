@@ -1,0 +1,445 @@
+{
+  "finding_id": "finding-cb9ab4e2",
+  "timestamp": "2026-03-16T21:06:11.133719+00:00",
+  "severity": "critical",
+  "symptom": "Ready rate 1.00/s dropped below threshold (rolling avg 4.43/s)",
+  "affected_resources": [
+    "ip-100-64-127-176.us-west-2.compute.internal",
+    "alt-cz29w",
+    "alt-lvrwh",
+    "ip-100-64-155-110.us-west-2.compute.internal",
+    "ip-192-168-238-176.us-west-2.compute.internal",
+    "alt-tg2dx",
+    "alt-dmc8x",
+    "alt-vk95f",
+    "ip-192-168-161-90.us-west-2.compute.internal",
+    "ip-192-168-240-39.us-west-2.compute.internal",
+    "alt-p8975",
+    "ip-192-168-162-68.us-west-2.compute.internal",
+    "alt-d8bz7",
+    "ip-100-64-116-9.us-west-2.compute.internal",
+    "ip-100-64-43-76.us-west-2.compute.internal",
+    "alt-kmg9x",
+    "alt-g54kf",
+    "ip-192-168-209-178.us-west-2.compute.internal",
+    "alt-zjfkn",
+    "alt-kw5sp"
+  ],
+  "k8s_events": [
+    {
+      "timestamp": "2026-03-16T21:05:22+00:00",
+      "namespace": "default",
+      "involved_object_kind": "NodeClaim",
+      "involved_object_name": "alt-4d9k6",
+      "reason": "InsufficientCapacityError",
+      "message": "NodeClaim alt-4d9k6 event: creating instance, insufficient capacity, with fleet error(s), MaxSpotInstanceCountExceeded: Max spot instance count exceeded (aws-error-code=UnfulfillableCapacity, aws-operation-name=CreateFleet, aws-request-id=c6b2e3fa-9ca6-4280-802c-af4ea787bbf1, aws-service-name=EC2, aws-status-code=200)",
+      "event_type": "Warning",
+      "scaling_step": 0,
+      "count": 1
+    },
+    {
+      "timestamp": "2026-03-16T21:05:23+00:00",
+      "namespace": "default",
+      "involved_object_kind": "NodeClaim",
+      "involved_object_name": "alt-4d9k6",
+      "reason": "TerminationGracePeriodExpiring",
+      "message": "All pods will be deleted by 2026-03-16T21:05:32Z",
+      "event_type": "Warning",
+      "scaling_step": 0,
+      "count": 1
+    },
+    {
+      "timestamp": "2026-03-16T21:05:22+00:00",
+      "namespace": "default",
+      "involved_object_kind": "NodeClaim",
+      "involved_object_name": "alt-4w5xx",
+      "reason": "InsufficientCapacityError",
+      "message": "NodeClaim alt-4w5xx event: creating instance, insufficient capacity, with fleet error(s), MaxSpotInstanceCountExceeded: Max spot instance count exceeded (aws-error-code=UnfulfillableCapacity, aws-operation-name=CreateFleet, aws-request-id=c6b2e3fa-9ca6-4280-802c-af4ea787bbf1, aws-service-name=EC2, aws-status-code=200)",
+      "event_type": "Warning",
+      "scaling_step": 0,
+      "count": 1
+    },
+    {
+      "timestamp": "2026-03-16T21:05:23+00:00",
+      "namespace": "default",
+      "involved_object_kind": "NodeClaim",
+      "involved_object_name": "alt-4w5xx",
+      "reason": "TerminationGracePeriodExpiring",
+      "message": "All pods will be deleted by 2026-03-16T21:05:32Z",
+      "event_type": "Warning",
+      "scaling_step": 0,
+      "count": 1
+    },
+    {
+      "timestamp": "2026-03-16T21:05:22+00:00",
+      "namespace": "default",
+      "involved_object_kind": "NodeClaim",
+      "involved_object_name": "alt-56zkt",
+      "reason": "InsufficientCapacityError",
+      "message": "NodeClaim alt-56zkt event: creating instance, insufficient capacity, with fleet error(s), MaxSpotInstanceCountExceeded: Max spot instance count exceeded (aws-error-code=UnfulfillableCapacity, aws-operation-name=CreateFleet, aws-request-id=c6b2e3fa-9ca6-4280-802c-af4ea787bbf1, aws-service-name=EC2, aws-status-code=200)",
+      "event_type": "Warning",
+      "scaling_step": 0,
+      "count": 1
+    },
+    {
+      "timestamp": "2026-03-16T21:05:23+00:00",
+      "namespace": "default",
+      "involved_object_kind": "NodeClaim",
+      "involved_object_name": "alt-56zkt",
+      "reason": "TerminationGracePeriodExpiring",
+      "message": "All pods will be deleted by 2026-03-16T21:05:32Z",
+      "event_type": "Warning",
+      "scaling_step": 0,
+      "count": 1
+    },
+    {
+      "timestamp": "2026-03-16T21:05:09+00:00",
+      "namespace": "default",
+      "involved_object_kind": "NodeClaim",
+      "involved_object_name": "alt-5vv78",
+      "reason": "InsufficientCapacityError",
+      "message": "NodeClaim alt-5vv78 event: creating instance, insufficient capacity, with fleet error(s), UnfulfillableCapacity: Unable to fulfill capacity due to your request configuration. Please adjust your request and try again. (aws-error-code=UnfulfillableCapacity, aws-operation-name=CreateFleet, aws-request-id=e376ca17-493f-45a9-9251-...",
+      "event_type": "Warning",
+      "scaling_step": 0,
+      "count": 1
+    },
+    {
+      "timestamp": "2026-03-16T21:05:10+00:00",
+      "namespace": "default",
+      "involved_object_kind": "NodeClaim",
+      "involved_object_name": "alt-5vv78",
+      "reason": "TerminationGracePeriodExpiring",
+      "message": "All pods will be deleted by 2026-03-16T21:05:19Z",
+      "event_type": "Warning",
+      "scaling_step": 0,
+      "count": 1
+    },
+    {
+      "timestamp": "2026-03-16T21:05:23+00:00",
+      "namespace": "default",
+      "involved_object_kind": "NodeClaim",
+      "involved_object_name": "alt-97fg6",
+      "reason": "InsufficientCapacityError",
+      "message": "NodeClaim alt-97fg6 event: creating instance, insufficient capacity, with fleet error(s), InsufficientInstanceCapacity: We currently do not have sufficient i4i.8xlarge capacity in the Availability Zone you requested (us-west-2d). Our system will be working on provisioning additional capacity. You can currently get i4i.8xlarge...",
+      "event_type": "Warning",
+      "scaling_step": 0,
+      "count": 1
+    },
+    {
+      "timestamp": "2026-03-16T21:05:24+00:00",
+      "namespace": "default",
+      "involved_object_kind": "NodeClaim",
+      "involved_object_name": "alt-97fg6",
+      "reason": "TerminationGracePeriodExpiring",
+      "message": "All pods will be deleted by 2026-03-16T21:05:33Z",
+      "event_type": "Warning",
+      "scaling_step": 0,
+      "count": 1
+    },
+    {
+      "timestamp": "2026-03-16T21:05:41+00:00",
+      "namespace": "default",
+      "involved_object_kind": "Node",
+      "involved_object_name": "ip-100-64-106-226.us-west-2.compute.internal",
+      "reason": "InvalidDiskCapacity",
+      "message": "invalid capacity 0 on image filesystem",
+      "event_type": "Warning",
+      "scaling_step": 0,
+      "count": 1
+    },
+    {
+      "timestamp": "2026-03-16T21:05:42+00:00",
+      "namespace": "default",
+      "involved_object_kind": "Node",
+      "involved_object_name": "ip-100-64-116-9.us-west-2.compute.internal",
+      "reason": "InvalidDiskCapacity",
+      "message": "invalid capacity 0 on image filesystem",
+      "event_type": "Warning",
+      "scaling_step": 0,
+      "count": 1
+    },
+    {
+      "timestamp": "2026-03-16T21:05:41+00:00",
+      "namespace": "default",
+      "involved_object_kind": "Node",
+      "involved_object_name": "ip-100-64-119-176.us-west-2.compute.internal",
+      "reason": "InvalidDiskCapacity",
+      "message": "invalid capacity 0 on image filesystem",
+      "event_type": "Warning",
+      "scaling_step": 0,
+      "count": 1
+    },
+    {
+      "timestamp": "2026-03-16T21:05:39+00:00",
+      "namespace": "default",
+      "involved_object_kind": "Node",
+      "involved_object_name": "ip-100-64-121-56.us-west-2.compute.internal",
+      "reason": "InvalidDiskCapacity",
+      "message": "invalid capacity 0 on image filesystem",
+      "event_type": "Warning",
+      "scaling_step": 0,
+      "count": 1
+    },
+    {
+      "timestamp": "2026-03-16T21:05:38+00:00",
+      "namespace": "default",
+      "involved_object_kind": "Node",
+      "involved_object_name": "ip-100-64-124-67.us-west-2.compute.internal",
+      "reason": "InvalidDiskCapacity",
+      "message": "invalid capacity 0 on image filesystem",
+      "event_type": "Warning",
+      "scaling_step": 0,
+      "count": 1
+    }
+  ],
+  "node_metrics": [
+    {
+      "node_name": "ip-100-64-127-176.us-west-2.compute.internal",
+      "cpu_usage_pct": 6.25,
+      "memory_usage_pct": 0.0,
+      "pod_count": 0,
+      "pods_ready": 0,
+      "pods_not_ready": 0
+    },
+    {
+      "node_name": "ip-192-168-204-212.us-west-2.compute.internal",
+      "cpu_usage_pct": 6.25,
+      "memory_usage_pct": 0.0,
+      "pod_count": 0,
+      "pods_ready": 0,
+      "pods_not_ready": 0
+    },
+    {
+      "node_name": "ip-192-168-238-176.us-west-2.compute.internal",
+      "cpu_usage_pct": 6.25,
+      "memory_usage_pct": 0.0,
+      "pod_count": 0,
+      "pods_ready": 0,
+      "pods_not_ready": 0
+    },
+    {
+      "node_name": "ip-100-64-131-218.us-west-2.compute.internal",
+      "cpu_usage_pct": 6.25,
+      "memory_usage_pct": 0.0,
+      "pod_count": 0,
+      "pods_ready": 0,
+      "pods_not_ready": 0
+    },
+    {
+      "node_name": "ip-192-168-252-75.us-west-2.compute.internal",
+      "cpu_usage_pct": 6.25,
+      "memory_usage_pct": 0.0,
+      "pod_count": 0,
+      "pods_ready": 0,
+      "pods_not_ready": 0
+    },
+    {
+      "node_name": "ip-192-168-204-137.us-west-2.compute.internal",
+      "cpu_usage_pct": 6.25,
+      "memory_usage_pct": 0.0,
+      "pod_count": 0,
+      "pods_ready": 0,
+      "pods_not_ready": 0
+    },
+    {
+      "node_name": "ip-192-168-211-130.us-west-2.compute.internal",
+      "cpu_usage_pct": 6.25,
+      "memory_usage_pct": 0.0,
+      "pod_count": 0,
+      "pods_ready": 0,
+      "pods_not_ready": 0
+    },
+    {
+      "node_name": "ip-192-168-240-58.us-west-2.compute.internal",
+      "cpu_usage_pct": 6.25,
+      "memory_usage_pct": 0.0,
+      "pod_count": 0,
+      "pods_ready": 0,
+      "pods_not_ready": 0
+    },
+    {
+      "node_name": "ip-192-168-229-155.us-west-2.compute.internal",
+      "cpu_usage_pct": 6.25,
+      "memory_usage_pct": 0.0,
+      "pod_count": 0,
+      "pods_ready": 0,
+      "pods_not_ready": 0
+    },
+    {
+      "node_name": "ip-100-64-160-103.us-west-2.compute.internal",
+      "cpu_usage_pct": 6.25,
+      "memory_usage_pct": 0.0,
+      "pod_count": 0,
+      "pods_ready": 0,
+      "pods_not_ready": 0
+    },
+    {
+      "node_name": "ip-192-168-224-120.us-west-2.compute.internal",
+      "cpu_usage_pct": 6.25,
+      "memory_usage_pct": 0.0,
+      "pod_count": 0,
+      "pods_ready": 0,
+      "pods_not_ready": 0
+    },
+    {
+      "node_name": "ip-192-168-203-184.us-west-2.compute.internal",
+      "cpu_usage_pct": 6.25,
+      "memory_usage_pct": 0.0,
+      "pod_count": 0,
+      "pods_ready": 0,
+      "pods_not_ready": 0
+    },
+    {
+      "node_name": "ip-100-64-142-207.us-west-2.compute.internal",
+      "cpu_usage_pct": 6.25,
+      "memory_usage_pct": 0.0,
+      "pod_count": 0,
+      "pods_ready": 0,
+      "pods_not_ready": 0
+    }
+  ],
+  "node_diagnostics": [
+    {
+      "node_name": "ip-100-64-127-176.us-west-2.compute.internal",
+      "instance_id": "i-06c3e1a7e711c7934",
+      "collection_timestamp": "2026-03-16T21:06:09.120424+00:00",
+      "kubelet_logs": {
+        "instance_id": "i-06c3e1a7e711c7934",
+        "command": "journalctl -u kubelet --no-pager -n 500",
+        "command_id": "",
+        "status": "Failed",
+        "output": "",
+        "error": "send_command failed"
+      },
+      "containerd_logs": {
+        "instance_id": "i-06c3e1a7e711c7934",
+        "command": "journalctl -u containerd --no-pager -n 500",
+        "command_id": "",
+        "status": "Failed",
+        "output": "",
+        "error": "send_command failed"
+      },
+      "journal_kubelet": {
+        "instance_id": "i-06c3e1a7e711c7934",
+        "command": "journalctl -u kubelet --no-pager --since '10 minutes ago'",
+        "command_id": "",
+        "status": "Failed",
+        "output": "",
+        "error": "send_command failed"
+      },
+      "journal_containerd": {
+        "instance_id": "i-06c3e1a7e711c7934",
+        "command": "journalctl -u containerd --no-pager --since '10 minutes ago'",
+        "command_id": "",
+        "status": "Failed",
+        "output": "",
+        "error": "send_command failed"
+      },
+      "resource_utilization": {
+        "instance_id": "i-06c3e1a7e711c7934",
+        "command": "top -bn1 | head -20; echo '---'; df -h; echo '---'; free -h",
+        "command_id": "",
+        "status": "Failed",
+        "output": "",
+        "error": "send_command failed"
+      }
+    },
+    {
+      "node_name": "ip-192-168-204-212.us-west-2.compute.internal",
+      "instance_id": "i-0cf403c6e24e0508a",
+      "collection_timestamp": "2026-03-16T21:06:10.125788+00:00",
+      "kubelet_logs": {
+        "instance_id": "i-0cf403c6e24e0508a",
+        "command": "journalctl -u kubelet --no-pager -n 500",
+        "command_id": "",
+        "status": "Failed",
+        "output": "",
+        "error": "send_command failed"
+      },
+      "containerd_logs": {
+        "instance_id": "i-0cf403c6e24e0508a",
+        "command": "journalctl -u containerd --no-pager -n 500",
+        "command_id": "",
+        "status": "Failed",
+        "output": "",
+        "error": "send_command failed"
+      },
+      "journal_kubelet": {
+        "instance_id": "i-0cf403c6e24e0508a",
+        "command": "journalctl -u kubelet --no-pager --since '10 minutes ago'",
+        "command_id": "",
+        "status": "Failed",
+        "output": "",
+        "error": "send_command failed"
+      },
+      "journal_containerd": {
+        "instance_id": "i-0cf403c6e24e0508a",
+        "command": "journalctl -u containerd --no-pager --since '10 minutes ago'",
+        "command_id": "",
+        "status": "Failed",
+        "output": "",
+        "error": "send_command failed"
+      },
+      "resource_utilization": {
+        "instance_id": "i-0cf403c6e24e0508a",
+        "command": "top -bn1 | head -20; echo '---'; df -h; echo '---'; free -h",
+        "command_id": "",
+        "status": "Failed",
+        "output": "",
+        "error": "send_command failed"
+      }
+    },
+    {
+      "node_name": "ip-192-168-238-176.us-west-2.compute.internal",
+      "instance_id": "i-0074b3ac15e85d250",
+      "collection_timestamp": "2026-03-16T21:06:11.131258+00:00",
+      "kubelet_logs": {
+        "instance_id": "i-0074b3ac15e85d250",
+        "command": "journalctl -u kubelet --no-pager -n 500",
+        "command_id": "",
+        "status": "Failed",
+        "output": "",
+        "error": "send_command failed"
+      },
+      "containerd_logs": {
+        "instance_id": "i-0074b3ac15e85d250",
+        "command": "journalctl -u containerd --no-pager -n 500",
+        "command_id": "",
+        "status": "Failed",
+        "output": "",
+        "error": "send_command failed"
+      },
+      "journal_kubelet": {
+        "instance_id": "i-0074b3ac15e85d250",
+        "command": "journalctl -u kubelet --no-pager --since '10 minutes ago'",
+        "command_id": "",
+        "status": "Failed",
+        "output": "",
+        "error": "send_command failed"
+      },
+      "journal_containerd": {
+        "instance_id": "i-0074b3ac15e85d250",
+        "command": "journalctl -u containerd --no-pager --since '10 minutes ago'",
+        "command_id": "",
+        "status": "Failed",
+        "output": "",
+        "error": "send_command failed"
+      },
+      "resource_utilization": {
+        "instance_id": "i-0074b3ac15e85d250",
+        "command": "top -bn1 | head -20; echo '---'; df -h; echo '---'; free -h",
+        "command_id": "",
+        "status": "Failed",
+        "output": "",
+        "error": "send_command failed"
+      }
+    }
+  ],
+  "evidence_references": [
+    "pods:pending=0,creating=0",
+    "warnings:InsufficientCapacityError=62,TerminationGracePeriodExpiring=62,InvalidDiskCapacity=49",
+    "ssm_diags:3"
+  ],
+  "root_cause": "InsufficientCapacityError x62 \u2014 Karpenter cannot provision nodes (spot exhaustion or NodePool limit reached); TerminationGracePeriodExpiring x62 \u2014 failed nodeclaim cleanup",
+  "resolved": true
+}

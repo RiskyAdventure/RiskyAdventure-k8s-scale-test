@@ -239,25 +239,57 @@ class AnomalyDetector:
     # ------------------------------------------------------------------
 
     def _pick_ssm_commands(self, warning_reasons, eni_evidence):
-        """Choose extra SSM commands based on what events and EC2 data show."""
+        """Choose extra SSM commands based on what events and EC2 data show.
+
+        Each command here adds an SSM send_command call per investigated node
+        (up to 3 nodes). Only add commands when evidence justifies them.
+        """
         extra = {}
         zero_pfx = any(v.get("prefix_count", -1) == 0 for v in eni_evidence.values())
 
+        # --- CNI / IPAMD checks — triggered by sandbox failures or zero prefixes ---
         if warning_reasons.get("FailedCreatePodSandBox", 0) > 0 or zero_pfx:
             extra["ipamd_log"] = "tail -200 /var/log/aws-routed-eni/ipamd.log 2>/dev/null || echo NO_IPAMD_LOG"
             extra["cni_config"] = "cat /etc/cni/net.d/* 2>/dev/null | head -50"
 
+        # --- Disk / image checks — triggered by pull failures ---
         if warning_reasons.get("Failed", 0) > 0 or warning_reasons.get("ErrImagePull", 0) > 0:
             extra["disk_images"] = "df -h; echo '---'; crictl images 2>/dev/null | tail -20"
 
+        # --- Memory checks — triggered by evictions or OOM ---
         if warning_reasons.get("Evicted", 0) > 0 or warning_reasons.get("OOMKilling", 0) > 0:
             extra["memory"] = "cat /proc/meminfo | head -10; echo '---'; dmesg | grep -i oom | tail -10"
+            # PSI confirms memory pressure before OOM — only when we see memory events
+            extra["psi"] = (
+                "cat /proc/pressure/cpu 2>/dev/null; echo '===PSI_SEP==='; "
+                "cat /proc/pressure/memory 2>/dev/null; echo '===PSI_SEP==='; "
+                "cat /proc/pressure/io 2>/dev/null"
+            )
 
+        # --- Scheduling checks — triggered by FailedScheduling ---
         if warning_reasons.get("FailedScheduling", 0) > 0:
             extra["kubelet_cfg"] = "cat /etc/kubernetes/kubelet/kubelet-config.json 2>/dev/null | head -30"
 
+        # --- Node readiness checks — triggered by NotReady or InvalidDiskCapacity ---
         if warning_reasons.get("NodeNotReady", 0) > 0:
             extra["kubelet_status"] = "systemctl status kubelet --no-pager -l 2>&1 | tail -20"
+            # Kubelet healthz catches TLS bootstrap delays seen in scale test logs
+            extra["kubelet_health"] = (
+                "curl -sk https://localhost:10250/healthz 2>&1; echo '===HEALTH_SEP==='; "
+                "systemctl is-active kubelet 2>&1"
+            )
+
+        if warning_reasons.get("InvalidDiskCapacity", 0) > 0:
+            # NVMe readiness: catches the i4i root volume setup race
+            extra["disk_readiness"] = "lsblk 2>/dev/null | grep nvme; echo '---'; df -h / 2>/dev/null"
+
+        # --- Per-core CPU — only when nodes show high CPU or stuck pods with no other cause ---
+        # mpstat takes 1s to sample, so only run when we suspect CPU saturation
+        total_warnings = sum(warning_reasons.values())
+        if (warning_reasons.get("Evicted", 0) > 0
+                or (total_warnings > 0 and not extra)):
+            # No specific cause identified but something is wrong — check CPU cores
+            extra["mpstat"] = "mpstat -P ALL 1 1 2>/dev/null | tail -n +4 || echo NO_MPSTAT"
 
         return extra
 
@@ -290,6 +322,16 @@ class AnomalyDetector:
         # SSM evidence
         if diagnostics:
             evidence_refs.append(f"ssm_diags:{len(diagnostics)}")
+
+        # Proactive node health evidence (PSI, kubelet, disk, mpstat)
+        proactive_clues = []
+        for d in diagnostics:
+            proactive_clues.extend(self._parse_psi_evidence(d))
+            proactive_clues.extend(self._parse_kubelet_health_evidence(d))
+            proactive_clues.extend(self._parse_disk_readiness_evidence(d))
+            proactive_clues.extend(self._parse_mpstat_evidence(d))
+        if proactive_clues:
+            evidence_refs.append(f"node_health:{len(proactive_clues)}_issues")
 
         # Determine severity from evidence weight
         severity = self._assess_severity(warnings, stuck_nodes, eni_evidence)
@@ -384,8 +426,9 @@ class AnomalyDetector:
             else:
                 clues.append(f"{len(zero_nodes)} nodes have 0 prefixes — IPAMD failure")
 
-        # --- SSM log evidence ---
+        # --- SSM log evidence (existing + new proactive checks) ---
         for d in diagnostics:
+            # Existing log-based checks
             for field in ["kubelet_logs", "containerd_logs", "journal_kubelet",
                           "journal_containerd", "resource_utilization"]:
                 r = getattr(d, field, None)
@@ -405,6 +448,12 @@ class AnomalyDetector:
                 if "failed to generate unique mac" in low:
                     clues.append(f"VPC CNI MAC collision on {d.node_name}")
 
+            # --- Proactive checks from SSM extra commands ---
+            clues.extend(self._parse_psi_evidence(d))
+            clues.extend(self._parse_kubelet_health_evidence(d))
+            clues.extend(self._parse_disk_readiness_evidence(d))
+            clues.extend(self._parse_mpstat_evidence(d))
+
         # --- Phase-based clues ---
         if phase_breakdown:
             pending = phase_breakdown.get("Pending", 0)
@@ -417,6 +466,168 @@ class AnomalyDetector:
         if not clues:
             return None
         return "; ".join(clues)
+
+    # ------------------------------------------------------------------
+    # Proactive node health parsers (ported from MCP audit findings)
+    # ------------------------------------------------------------------
+
+    def _parse_psi_evidence(self, diag):
+        """Parse PSI (Pressure Stall Information) from SSM output.
+
+        Detects CPU/memory/IO contention BEFORE it manifests as pod failures.
+        PSI avg10 > 25% for CPU or > 10% for IO indicates active stalling.
+        """
+        clues = []
+        r = getattr(diag, "resource_utilization", None)
+        if not r or r.status != "Success" or not r.output:
+            return clues
+        # PSI output is appended to resource_utilization via extra commands
+        if "===PSI_SEP===" not in r.output:
+            return clues
+        try:
+            # Split the PSI sections: cpu, memory, io
+            psi_start = r.output.index("=== psi ===\n") if "=== psi ===" in r.output else -1
+            psi_text = r.output
+            if "===PSI_SEP===" in psi_text:
+                sections = psi_text.split("===PSI_SEP===")
+                for section in sections:
+                    avg10 = self._extract_psi_avg10(section)
+                    if avg10 is None:
+                        continue
+                    section_lower = section.lower()
+                    if "cpu" in section_lower or sections.index(section) == 0:
+                        if avg10 > 25.0:
+                            clues.append(f"CPU pressure avg10={avg10:.1f}% on {diag.node_name}")
+                    elif "memory" in section_lower or sections.index(section) == 1:
+                        if avg10 > 25.0:
+                            clues.append(f"Memory pressure avg10={avg10:.1f}% on {diag.node_name}")
+                    elif "io" in section_lower or sections.index(section) == 2:
+                        if avg10 > 10.0:
+                            clues.append(f"IO pressure avg10={avg10:.1f}% on {diag.node_name}")
+        except Exception:
+            pass
+        return clues
+
+    @staticmethod
+    def _extract_psi_avg10(text):
+        """Extract avg10 value from a PSI 'some' line.
+
+        Format: 'some avg10=0.50 avg60=0.25 avg300=0.10 total=12345'
+        """
+        for line in text.strip().split("\n"):
+            if line.startswith("some "):
+                for part in line.split():
+                    if part.startswith("avg10="):
+                        try:
+                            return float(part.split("=", 1)[1])
+                        except ValueError:
+                            return None
+        return None
+
+    def _parse_kubelet_health_evidence(self, diag):
+        """Parse kubelet healthz + systemctl output.
+
+        Catches TLS bootstrap delays (massive volume in real scale test logs)
+        and kubelet not-active states before K8s conditions propagate.
+        """
+        clues = []
+        r = getattr(diag, "resource_utilization", None)
+        if not r or r.status != "Success" or not r.output:
+            return clues
+        if "===HEALTH_SEP===" not in r.output:
+            return clues
+        try:
+            parts = r.output.split("===HEALTH_SEP===")
+            healthz = parts[0].strip() if len(parts) > 0 else ""
+            systemctl = parts[1].strip() if len(parts) > 1 else ""
+
+            if healthz and healthz != "ok":
+                clues.append(f"Kubelet healthz failed on {diag.node_name}: {healthz[:100]}")
+            if systemctl and systemctl != "active":
+                clues.append(f"Kubelet not active on {diag.node_name}: {systemctl}")
+        except Exception:
+            pass
+        return clues
+
+    def _parse_disk_readiness_evidence(self, diag):
+        """Parse lsblk + df output to detect NVMe initialization failures.
+
+        On i4i instances, InvalidDiskCapacity events fire when the NVMe root
+        volume hasn't finished setup. df showing 0 capacity confirms this.
+        """
+        clues = []
+        r = getattr(diag, "resource_utilization", None)
+        if not r or r.status != "Success" or not r.output:
+            return clues
+        if "nvme" not in r.output.lower() and "disk_readiness" not in r.output:
+            return clues
+        try:
+            for line in r.output.split("\n"):
+                parts = line.split()
+                # df -h output: "Filesystem  Size  Used  Avail  Use%  Mounted on"
+                if len(parts) >= 6 and parts[-1] == "/":
+                    size = parts[1]
+                    if size in ("0", "0B", "0K"):
+                        clues.append(f"Root filesystem has 0 capacity on {diag.node_name} — NVMe not initialized")
+                        break
+        except Exception:
+            pass
+        return clues
+
+    def _parse_mpstat_evidence(self, diag):
+        """Parse mpstat per-core output to detect reservedSystemCPUs saturation.
+
+        If any core has idle < 10%, it's saturated. If saturated cores are in
+        the reserved range (typically 0-1), system processes are starved.
+
+        mpstat output format (with AM/PM):
+          01:00:01 AM  0  5.00  0.00  2.00  0.00  0.00  0.00  0.00  0.00  0.00  93.00
+        mpstat output format (24h):
+          01:00:01  0  5.00  0.00  2.00  0.00  0.00  0.00  0.00  0.00  0.00  93.00
+        """
+        clues = []
+        r = getattr(diag, "resource_utilization", None)
+        if not r or r.status != "Success" or not r.output:
+            return clues
+        if "NO_MPSTAT" in r.output:
+            return clues
+        try:
+            saturated_cores = []
+            for line in r.output.split("\n"):
+                line = line.strip()
+                if not line or line.startswith("Average:") or line.startswith("Linux"):
+                    continue
+                fields = line.split()
+                if len(fields) < 11:
+                    continue
+
+                # Find the CPU column — skip time and optional AM/PM
+                cpu_idx = 1
+                if fields[1] in ("AM", "PM"):
+                    cpu_idx = 2
+                if cpu_idx >= len(fields):
+                    continue
+
+                core_str = fields[cpu_idx]
+                if core_str in ("all", "CPU"):
+                    continue
+                try:
+                    core_id = int(core_str)
+                    idle_pct = float(fields[-1])  # last column is always %idle
+                    if idle_pct < 10.0:
+                        saturated_cores.append(core_id)
+                except (ValueError, IndexError):
+                    continue
+            if saturated_cores:
+                cores_str = ",".join(str(c) for c in saturated_cores[:5])
+                clues.append(
+                    f"CPU cores saturated (idle<10%) on {diag.node_name}: "
+                    f"cores [{cores_str}]"
+                    + (f" +{len(saturated_cores)-5} more" if len(saturated_cores) > 5 else "")
+                )
+        except Exception:
+            pass
+        return clues
 
     # ------------------------------------------------------------------
     # Helpers

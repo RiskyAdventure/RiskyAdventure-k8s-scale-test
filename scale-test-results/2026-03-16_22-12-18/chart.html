@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8">
+<title>Scale Test — 2026-03-16_22-12-18</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+<style>
+body { font-family: -apple-system, sans-serif; margin: 20px; background: #1a1a2e; color: #eee; }
+.chart-box { background: #16213e; border-radius: 8px; padding: 20px; margin-bottom: 20px; }
+h1 { color: #e94560; margin-bottom: 4px; }
+.run-id { color: #888; font-size: 13px; margin-bottom: 16px; }
+.stats { display: flex; gap: 16px; margin-bottom: 20px; flex-wrap: wrap; }
+.stat { background: #0f3460; padding: 12px 20px; border-radius: 8px; }
+.stat .val { font-size: 24px; font-weight: bold; color: #e94560; }
+.stat .lbl { font-size: 11px; color: #aaa; }
+table { border-collapse: collapse; width: 100%; margin-bottom: 20px; }
+th, td { padding: 8px 14px; text-align: right; border-bottom: 1px solid #2a2a4a; }
+th { color: #aaa; font-size: 12px; text-transform: uppercase; }
+td { color: #ddd; font-size: 14px; }
+td:first-child, th:first-child { text-align: left; }
+.result { font-size: 18px; font-weight: bold; padding: 4px 12px; border-radius: 4px; display: inline-block; margin-bottom: 12px; }
+.result.pass { background: #1b4332; color: #4ecca3; }
+.result.fail { background: #4a1525; color: #e94560; }
+.note { color: #666; font-size: 11px; margin-top: 4px; }
+.data-table { max-height: 400px; overflow-y: auto; }
+.data-table table { font-size: 12px; }
+.data-table td, .data-table th { padding: 4px 10px; white-space: nowrap; }
+</style></head><body>
+<h1>Scale Test Results</h1>
+<div class="run-id">2026-03-16_22-12-18</div>
+<div class="result pass">PASSED — success</div>
+
+<div class="chart-box">
+<table>
+<tr><th style="text-align:left">Metric</th><th>Value</th></tr>
+<tr><td style="color:#aaa">Target</td><td>10,000 pods</td></tr>
+<tr><td style="color:#aaa">Reached</td><td>10,200 pods</td></tr>
+<tr><td style="color:#aaa">Scaling Duration</td><td>6.8m (406s)</td></tr>
+<tr><td style="color:#aaa">Avg Rate</td><td>24.6 pods/s</td></tr>
+<tr><td style="color:#aaa">Peak Rate (clean)</td><td>77.8 pods/s</td></tr>
+<tr><td style="color:#aaa">Nodes</td><td>244</td></tr>
+<tr><td style="color:#aaa">Anomalies</td><td>1</td></tr>
+<tr><td style="color:#aaa">Data Points</td><td>143 (0 gaps)</td></tr>
+</table>
+</div>
+
+
+
+
+
+<div class="chart-box data-table">
+<table>
+<tr><th>Elapsed</th><th>Time</th><th>Ready</th><th>Pending</th><th>Total</th><th>Rate/s</th><th>Interval</th><th>Gap</th></tr>
+<tr><td>0s</td><td>22:19:32</td><td>200</td><td>0</td><td>200</td><td>0.0</td><td>0.0s</td><td></td></tr>
+<tr><td>5s</td><td>22:19:37</td><td>200</td><td>0</td><td>200</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>10s</td><td>22:19:42</td><td>200</td><td>0</td><td>200</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>15s</td><td>22:19:47</td><td>200</td><td>4,500</td><td>4,700</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>20s</td><td>22:19:52</td><td>200</td><td>7,000</td><td>7,200</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>25s</td><td>22:19:58</td><td>200</td><td>10,000</td><td>10,200</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>30s</td><td>22:20:03</td><td>225</td><td>9,975</td><td>10,200</td><td>5.0</td><td>5.0s</td><td></td></tr>
+<tr><td>35s</td><td>22:20:08</td><td>273</td><td>9,927</td><td>10,200</td><td>9.6</td><td>5.0s</td><td></td></tr>
+<tr><td>40s</td><td>22:20:13</td><td>303</td><td>9,897</td><td>10,200</td><td>6.0</td><td>5.0s</td><td></td></tr>
+<tr><td>45s</td><td>22:20:18</td><td>323</td><td>9,877</td><td>10,200</td><td>4.0</td><td>5.0s</td><td></td></tr>
+<tr><td>50s</td><td>22:20:23</td><td>337</td><td>9,863</td><td>10,200</td><td>2.8</td><td>5.0s</td><td></td></tr>
+<tr><td>55s</td><td>22:20:28</td><td>346</td><td>9,854</td><td>10,200</td><td>1.8</td><td>5.0s</td><td></td></tr>
+<tr><td>60s</td><td>22:20:33</td><td>384</td><td>9,816</td><td>10,200</td><td>7.6</td><td>5.0s</td><td></td></tr>
+<tr><td>65s</td><td>22:20:38</td><td>402</td><td>9,798</td><td>10,200</td><td>3.6</td><td>5.0s</td><td></td></tr>
+<tr><td>70s</td><td>22:20:43</td><td>443</td><td>9,757</td><td>10,200</td><td>8.1</td><td>5.1s</td><td></td></tr>
+<tr><td>78s</td><td>22:20:50</td><td>480</td><td>9,720</td><td>10,200</td><td>4.8</td><td>7.8s</td><td></td></tr>
+<tr><td>83s</td><td>22:20:55</td><td>507</td><td>9,693</td><td>10,200</td><td>5.4</td><td>5.0s</td><td></td></tr>
+<tr><td>88s</td><td>22:21:00</td><td>548</td><td>9,652</td><td>10,200</td><td>8.2</td><td>5.0s</td><td></td></tr>
+<tr><td>93s</td><td>22:21:05</td><td>630</td><td>9,570</td><td>10,200</td><td>16.4</td><td>5.0s</td><td></td></tr>
+<tr><td>98s</td><td>22:21:10</td><td>947</td><td>9,253</td><td>10,200</td><td>63.4</td><td>5.0s</td><td></td></tr>
+<tr><td>103s</td><td>22:21:15</td><td>1,336</td><td>8,864</td><td>10,200</td><td>77.7</td><td>5.0s</td><td></td></tr>
+<tr><td>108s</td><td>22:21:20</td><td>1,569</td><td>8,631</td><td>10,200</td><td>46.6</td><td>5.0s</td><td></td></tr>
+<tr><td>113s</td><td>22:21:25</td><td>1,722</td><td>8,478</td><td>10,200</td><td>30.6</td><td>5.0s</td><td></td></tr>
+<tr><td>118s</td><td>22:21:30</td><td>1,861</td><td>8,339</td><td>10,200</td><td>27.8</td><td>5.0s</td><td></td></tr>
+<tr><td>123s</td><td>22:21:35</td><td>2,035</td><td>8,165</td><td>10,200</td><td>34.8</td><td>5.0s</td><td></td></tr>
+<tr><td>128s</td><td>22:21:40</td><td>2,186</td><td>8,014</td><td>10,200</td><td>30.2</td><td>5.0s</td><td></td></tr>
+<tr><td>133s</td><td>22:21:45</td><td>2,344</td><td>7,856</td><td>10,200</td><td>31.6</td><td>5.0s</td><td></td></tr>
+<tr><td>138s</td><td>22:21:50</td><td>2,454</td><td>7,746</td><td>10,200</td><td>22.0</td><td>5.0s</td><td></td></tr>
+<tr><td>143s</td><td>22:21:55</td><td>2,734</td><td>7,466</td><td>10,200</td><td>55.9</td><td>5.0s</td><td></td></tr>
+<tr><td>148s</td><td>22:22:00</td><td>2,912</td><td>7,288</td><td>10,200</td><td>35.6</td><td>5.0s</td><td></td></tr>
+<tr><td>153s</td><td>22:22:05</td><td>2,988</td><td>7,212</td><td>10,200</td><td>15.2</td><td>5.0s</td><td></td></tr>
+<tr><td>158s</td><td>22:22:10</td><td>3,206</td><td>6,994</td><td>10,200</td><td>43.6</td><td>5.0s</td><td></td></tr>
+<tr><td>163s</td><td>22:22:15</td><td>3,460</td><td>6,740</td><td>10,200</td><td>50.8</td><td>5.0s</td><td></td></tr>
+<tr><td>168s</td><td>22:22:20</td><td>3,686</td><td>6,514</td><td>10,200</td><td>45.2</td><td>5.0s</td><td></td></tr>
+<tr><td>173s</td><td>22:22:25</td><td>3,913</td><td>6,287</td><td>10,200</td><td>45.4</td><td>5.0s</td><td></td></tr>
+<tr><td>178s</td><td>22:22:30</td><td>4,038</td><td>6,162</td><td>10,200</td><td>25.0</td><td>5.0s</td><td></td></tr>
+<tr><td>183s</td><td>22:22:35</td><td>4,203</td><td>5,997</td><td>10,200</td><td>33.0</td><td>5.0s</td><td></td></tr>
+<tr><td>188s</td><td>22:22:40</td><td>4,415</td><td>5,785</td><td>10,200</td><td>42.4</td><td>5.0s</td><td></td></tr>
+<tr><td>193s</td><td>22:22:45</td><td>4,556</td><td>5,644</td><td>10,200</td><td>28.2</td><td>5.0s</td><td></td></tr>
+<tr><td>198s</td><td>22:22:50</td><td>4,753</td><td>5,447</td><td>10,200</td><td>39.4</td><td>5.0s</td><td></td></tr>
+<tr><td>203s</td><td>22:22:55</td><td>5,034</td><td>5,166</td><td>10,200</td><td>56.2</td><td>5.0s</td><td></td></tr>
+<tr><td>208s</td><td>22:23:00</td><td>5,162</td><td>5,038</td><td>10,200</td><td>25.6</td><td>5.0s</td><td></td></tr>
+<tr><td>213s</td><td>22:23:05</td><td>5,407</td><td>4,793</td><td>10,200</td><td>48.9</td><td>5.0s</td><td></td></tr>
+<tr><td>218s</td><td>22:23:10</td><td>5,704</td><td>4,496</td><td>10,200</td><td>59.2</td><td>5.0s</td><td></td></tr>
+<tr><td>223s</td><td>22:23:15</td><td>5,925</td><td>4,275</td><td>10,200</td><td>44.2</td><td>5.0s</td><td></td></tr>
+<tr><td>228s</td><td>22:23:20</td><td>6,017</td><td>4,183</td><td>10,200</td><td>18.4</td><td>5.0s</td><td></td></tr>
+<tr><td>233s</td><td>22:23:25</td><td>6,164</td><td>4,036</td><td>10,200</td><td>29.4</td><td>5.0s</td><td></td></tr>
+<tr><td>238s</td><td>22:23:30</td><td>6,232</td><td>3,968</td><td>10,200</td><td>13.6</td><td>5.0s</td><td></td></tr>
+<tr><td>243s</td><td>22:23:35</td><td>6,347</td><td>3,853</td><td>10,200</td><td>23.0</td><td>5.0s</td><td></td></tr>
+<tr><td>248s</td><td>22:23:40</td><td>6,571</td><td>3,629</td><td>10,200</td><td>44.8</td><td>5.0s</td><td></td></tr>
+<tr><td>253s</td><td>22:23:45</td><td>6,845</td><td>3,355</td><td>10,200</td><td>54.8</td><td>5.0s</td><td></td></tr>
+<tr><td>258s</td><td>22:23:50</td><td>6,926</td><td>3,274</td><td>10,200</td><td>16.2</td><td>5.0s</td><td></td></tr>
+<tr><td>263s</td><td>22:23:55</td><td>7,079</td><td>3,121</td><td>10,200</td><td>30.6</td><td>5.0s</td><td></td></tr>
+<tr><td>268s</td><td>22:24:00</td><td>7,263</td><td>2,937</td><td>10,200</td><td>36.8</td><td>5.0s</td><td></td></tr>
+<tr><td>273s</td><td>22:24:05</td><td>7,469</td><td>2,731</td><td>10,200</td><td>41.2</td><td>5.0s</td><td></td></tr>
+<tr><td>278s</td><td>22:24:10</td><td>7,768</td><td>2,432</td><td>10,200</td><td>59.8</td><td>5.0s</td><td></td></tr>
+<tr><td>283s</td><td>22:24:15</td><td>7,956</td><td>2,244</td><td>10,200</td><td>37.6</td><td>5.0s</td><td></td></tr>
+<tr><td>288s</td><td>22:24:21</td><td>8,104</td><td>2,096</td><td>10,200</td><td>29.6</td><td>5.0s</td><td></td></tr>
+<tr><td>293s</td><td>22:24:26</td><td>8,420</td><td>1,780</td><td>10,200</td><td>63.2</td><td>5.0s</td><td></td></tr>
+<tr><td>298s</td><td>22:24:31</td><td>8,801</td><td>1,399</td><td>10,200</td><td>76.2</td><td>5.0s</td><td></td></tr>
+<tr><td>303s</td><td>22:24:36</td><td>8,979</td><td>1,221</td><td>10,200</td><td>35.6</td><td>5.0s</td><td></td></tr>
+<tr><td>308s</td><td>22:24:41</td><td>9,193</td><td>1,007</td><td>10,200</td><td>42.8</td><td>5.0s</td><td></td></tr>
+<tr><td>313s</td><td>22:24:46</td><td>9,432</td><td>768</td><td>10,200</td><td>47.8</td><td>5.0s</td><td></td></tr>
+<tr><td>318s</td><td>22:24:51</td><td>9,528</td><td>672</td><td>10,200</td><td>19.2</td><td>5.0s</td><td></td></tr>
+<tr><td>323s</td><td>22:24:56</td><td>9,694</td><td>506</td><td>10,200</td><td>33.2</td><td>5.0s</td><td></td></tr>
+<tr><td>328s</td><td>22:25:01</td><td>9,909</td><td>291</td><td>10,200</td><td>42.9</td><td>5.0s</td><td></td></tr>
+<tr><td>333s</td><td>22:25:06</td><td>9,953</td><td>247</td><td>10,200</td><td>8.8</td><td>5.0s</td><td></td></tr>
+<tr><td>338s</td><td>22:25:11</td><td>10,057</td><td>143</td><td>10,200</td><td>20.8</td><td>5.0s</td><td></td></tr>
+<tr><td>343s</td><td>22:25:16</td><td>10,093</td><td>107</td><td>10,200</td><td>7.2</td><td>5.0s</td><td></td></tr>
+<tr><td>348s</td><td>22:25:21</td><td>10,109</td><td>91</td><td>10,200</td><td>3.2</td><td>5.0s</td><td></td></tr>
+<tr><td>353s</td><td>22:25:26</td><td>10,128</td><td>72</td><td>10,200</td><td>3.8</td><td>5.0s</td><td></td></tr>
+<tr><td>358s</td><td>22:25:31</td><td>10,107</td><td>92</td><td>10,199</td><td>-4.2</td><td>5.0s</td><td></td></tr>
+<tr><td>363s</td><td>22:25:36</td><td>10,155</td><td>45</td><td>10,200</td><td>9.6</td><td>5.0s</td><td></td></tr>
+<tr><td>368s</td><td>22:25:41</td><td>10,163</td><td>37</td><td>10,200</td><td>1.6</td><td>5.0s</td><td></td></tr>
+<tr><td>373s</td><td>22:25:46</td><td>10,166</td><td>34</td><td>10,200</td><td>0.6</td><td>5.0s</td><td></td></tr>
+<tr><td>379s</td><td>22:25:52</td><td>10,170</td><td>30</td><td>10,200</td><td>0.6</td><td>6.3s</td><td></td></tr>
+<tr><td>384s</td><td>22:25:57</td><td>10,173</td><td>27</td><td>10,200</td><td>0.6</td><td>5.0s</td><td></td></tr>
+<tr><td>389s</td><td>22:26:02</td><td>10,173</td><td>27</td><td>10,200</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>396s</td><td>22:26:09</td><td>10,179</td><td>21</td><td>10,200</td><td>0.9</td><td>6.8s</td><td></td></tr>
+<tr><td>401s</td><td>22:26:14</td><td>10,181</td><td>19</td><td>10,200</td><td>0.4</td><td>5.0s</td><td></td></tr>
+<tr><td>406s</td><td>22:26:19</td><td>10,185</td><td>15</td><td>10,200</td><td>0.8</td><td>5.0s</td><td></td></tr>
+<tr><td>411s</td><td>22:26:24</td><td>10,192</td><td>8</td><td>10,200</td><td>1.4</td><td>5.0s</td><td></td></tr>
+<tr><td>416s</td><td>22:26:29</td><td>10,195</td><td>5</td><td>10,200</td><td>0.6</td><td>5.0s</td><td></td></tr>
+<tr><td>421s</td><td>22:26:34</td><td>10,200</td><td>0</td><td>10,200</td><td>1.0</td><td>5.0s</td><td></td></tr>
+<tr><td>558s</td><td>22:28:51</td><td>10,200</td><td>0</td><td>10,200</td><td>0.0</td><td>10.3s</td><td></td></tr>
+<tr><td>569s</td><td>22:29:01</td><td>10,200</td><td>0</td><td>10,200</td><td>0.0</td><td>10.3s</td><td></td></tr>
+<tr><td>579s</td><td>22:29:11</td><td>10,200</td><td>0</td><td>10,200</td><td>0.0</td><td>10.3s</td><td></td></tr>
+<tr><td>589s</td><td>22:29:22</td><td>10,200</td><td>0</td><td>10,200</td><td>0.0</td><td>10.3s</td><td></td></tr>
+<tr><td>599s</td><td>22:29:32</td><td>10,200</td><td>0</td><td>10,200</td><td>0.0</td><td>10.2s</td><td></td></tr>
+<tr><td>610s</td><td>22:29:42</td><td>10,200</td><td>0</td><td>10,200</td><td>0.0</td><td>10.3s</td><td></td></tr>
+<tr><td>620s</td><td>22:29:52</td><td>10,200</td><td>0</td><td>10,200</td><td>0.0</td><td>10.2s</td><td></td></tr>
+<tr><td>630s</td><td>22:30:03</td><td>10,200</td><td>0</td><td>10,200</td><td>0.0</td><td>10.2s</td><td></td></tr>
+<tr><td>640s</td><td>22:30:13</td><td>10,200</td><td>0</td><td>10,200</td><td>0.0</td><td>10.3s</td><td></td></tr>
+<tr><td>653s</td><td>22:30:25</td><td>10,200</td><td>0</td><td>10,200</td><td>0.0</td><td>12.5s</td><td></td></tr>
+<tr><td>663s</td><td>22:30:36</td><td>10,200</td><td>0</td><td>10,200</td><td>0.0</td><td>10.3s</td><td></td></tr>
+<tr><td>673s</td><td>22:30:46</td><td>10,200</td><td>0</td><td>10,200</td><td>0.0</td><td>10.3s</td><td></td></tr>
+<tr><td>684s</td><td>22:30:56</td><td>10,200</td><td>0</td><td>10,200</td><td>0.0</td><td>10.2s</td><td></td></tr>
+<tr><td>694s</td><td>22:31:06</td><td>10,200</td><td>0</td><td>10,200</td><td>0.0</td><td>10.3s</td><td></td></tr>
+<tr><td>704s</td><td>22:31:17</td><td>10,200</td><td>0</td><td>10,200</td><td>0.0</td><td>10.2s</td><td></td></tr>
+<tr><td>714s</td><td>22:31:27</td><td>10,200</td><td>0</td><td>10,200</td><td>0.0</td><td>10.3s</td><td></td></tr>
+<tr><td>725s</td><td>22:31:37</td><td>10,200</td><td>0</td><td>10,200</td><td>0.0</td><td>10.3s</td><td></td></tr>
+<tr><td>735s</td><td>22:31:47</td><td>10,200</td><td>0</td><td>10,200</td><td>0.0</td><td>10.3s</td><td></td></tr>
+<tr><td>745s</td><td>22:31:58</td><td>10,200</td><td>0</td><td>10,200</td><td>0.0</td><td>10.2s</td><td></td></tr>
+<tr><td>756s</td><td>22:32:08</td><td>10,200</td><td>0</td><td>10,200</td><td>0.0</td><td>10.3s</td><td></td></tr>
+<tr><td>766s</td><td>22:32:18</td><td>10,200</td><td>0</td><td>10,200</td><td>0.0</td><td>10.3s</td><td></td></tr>
+<tr><td>776s</td><td>22:32:28</td><td>10,200</td><td>0</td><td>10,200</td><td>0.0</td><td>10.2s</td><td></td></tr>
+<tr><td>786s</td><td>22:32:39</td><td>10,200</td><td>0</td><td>10,200</td><td>0.0</td><td>10.3s</td><td></td></tr>
+<tr><td>797s</td><td>22:32:49</td><td>10,200</td><td>0</td><td>10,200</td><td>0.0</td><td>10.3s</td><td></td></tr>
+<tr><td>807s</td><td>22:32:59</td><td>10,200</td><td>0</td><td>10,200</td><td>0.0</td><td>10.2s</td><td></td></tr>
+<tr><td>817s</td><td>22:33:10</td><td>10,200</td><td>0</td><td>10,200</td><td>0.0</td><td>10.3s</td><td></td></tr>
+<tr><td>827s</td><td>22:33:20</td><td>10,200</td><td>0</td><td>10,200</td><td>0.0</td><td>10.3s</td><td></td></tr>
+<tr><td>838s</td><td>22:33:30</td><td>10,200</td><td>0</td><td>10,200</td><td>0.0</td><td>10.2s</td><td></td></tr>
+<tr><td>848s</td><td>22:33:40</td><td>10,200</td><td>0</td><td>10,200</td><td>0.0</td><td>10.2s</td><td></td></tr>
+<tr><td>858s</td><td>22:33:51</td><td>10,200</td><td>0</td><td>10,200</td><td>0.0</td><td>10.2s</td><td></td></tr>
+<tr><td>868s</td><td>22:34:01</td><td>10,200</td><td>0</td><td>10,200</td><td>0.0</td><td>10.3s</td><td></td></tr>
+<tr><td>879s</td><td>22:34:11</td><td>10,200</td><td>0</td><td>10,200</td><td>0.0</td><td>10.3s</td><td></td></tr>
+<tr><td>889s</td><td>22:34:21</td><td>10,200</td><td>0</td><td>10,200</td><td>0.0</td><td>10.3s</td><td></td></tr>
+<tr><td>899s</td><td>22:34:32</td><td>10,200</td><td>0</td><td>10,200</td><td>0.0</td><td>10.3s</td><td></td></tr>
+<tr><td>909s</td><td>22:34:42</td><td>10,200</td><td>0</td><td>10,200</td><td>0.0</td><td>10.3s</td><td></td></tr>
+<tr><td>920s</td><td>22:34:52</td><td>10,200</td><td>0</td><td>10,200</td><td>0.0</td><td>10.2s</td><td></td></tr>
+<tr><td>930s</td><td>22:35:02</td><td>10,200</td><td>0</td><td>10,200</td><td>0.0</td><td>10.3s</td><td></td></tr>
+<tr><td>940s</td><td>22:35:13</td><td>10,200</td><td>0</td><td>10,200</td><td>0.0</td><td>10.2s</td><td></td></tr>
+<tr><td>950s</td><td>22:35:23</td><td>10,200</td><td>0</td><td>10,200</td><td>0.0</td><td>10.3s</td><td></td></tr>
+<tr><td>961s</td><td>22:35:33</td><td>10,200</td><td>0</td><td>10,200</td><td>0.0</td><td>10.3s</td><td></td></tr>
+<tr><td>971s</td><td>22:35:43</td><td>10,200</td><td>0</td><td>10,200</td><td>0.0</td><td>10.3s</td><td></td></tr>
+<tr><td>981s</td><td>22:35:54</td><td>10,200</td><td>0</td><td>10,200</td><td>0.0</td><td>10.3s</td><td></td></tr>
+<tr><td>992s</td><td>22:36:04</td><td>10,200</td><td>0</td><td>10,200</td><td>0.0</td><td>10.3s</td><td></td></tr>
+<tr><td>1002s</td><td>22:36:14</td><td>10,200</td><td>0</td><td>10,200</td><td>0.0</td><td>10.3s</td><td></td></tr>
+<tr><td>1012s</td><td>22:36:25</td><td>10,200</td><td>0</td><td>10,200</td><td>0.0</td><td>10.3s</td><td></td></tr>
+<tr><td>1022s</td><td>22:36:35</td><td>10,200</td><td>0</td><td>10,200</td><td>0.0</td><td>10.3s</td><td></td></tr>
+<tr><td>1033s</td><td>22:36:45</td><td>10,200</td><td>0</td><td>10,200</td><td>0.0</td><td>10.3s</td><td></td></tr>
+<tr><td>1043s</td><td>22:36:55</td><td>10,163</td><td>0</td><td>10,200</td><td>-3.6</td><td>10.3s</td><td></td></tr>
+<tr><td>1053s</td><td>22:37:06</td><td>10,167</td><td>0</td><td>10,200</td><td>0.4</td><td>10.3s</td><td></td></tr>
+<tr><td>1063s</td><td>22:37:16</td><td>10,200</td><td>0</td><td>10,200</td><td>3.2</td><td>10.3s</td><td></td></tr>
+<tr><td>1074s</td><td>22:37:26</td><td>10,200</td><td>0</td><td>10,200</td><td>0.0</td><td>10.3s</td><td></td></tr>
+<tr><td>1084s</td><td>22:37:36</td><td>10,200</td><td>0</td><td>10,200</td><td>0.0</td><td>10.3s</td><td></td></tr>
+<tr><td>1094s</td><td>22:37:47</td><td>10,200</td><td>0</td><td>10,200</td><td>0.0</td><td>10.3s</td><td></td></tr>
+<tr><td>1104s</td><td>22:37:57</td><td>10,200</td><td>0</td><td>10,200</td><td>0.0</td><td>10.3s</td><td></td></tr>
+<tr><td>1115s</td><td>22:38:07</td><td>10,200</td><td>0</td><td>10,200</td><td>0.0</td><td>10.2s</td><td></td></tr>
+<tr><td>1125s</td><td>22:38:17</td><td>10,200</td><td>0</td><td>10,200</td><td>0.0</td><td>10.3s</td><td></td></tr>
+<tr><td>1135s</td><td>22:38:28</td><td>10,200</td><td>0</td><td>10,200</td><td>0.0</td><td>10.3s</td><td></td></tr>
+<tr><td>1145s</td><td>22:38:38</td><td>10,200</td><td>0</td><td>10,200</td><td>0.0</td><td>10.3s</td><td></td></tr>
+<tr><td>1156s</td><td>22:38:48</td><td>10,200</td><td>0</td><td>10,200</td><td>0.0</td><td>10.3s</td><td></td></tr>
+
+</table>
+</div>
+
+<div class="chart-box">
+<canvas id="rateChart" height="100"></canvas>
+<div class="note">Y axis capped at p95 × 1.5 to avoid spike distortion</div>
+</div>
+<div class="chart-box">
+<canvas id="countChart" height="100"></canvas>
+</div>
+
+<script>
+const ts = [0, 0, 0, 0.0, 5.0, 10.0, 15.0, 20.0, 25.0, 30.0, 35.0, 40.0, 45.1, 50.1, 55.1, 62.9, 67.9, 72.9, 77.9, 82.9, 87.9, 92.9, 97.9, 102.9, 107.9, 112.9, 117.9, 122.9, 127.9, 132.9, 137.9, 142.9, 147.9, 152.9, 157.9, 162.9, 167.9, 173.0, 178.0, 183.0, 188.0, 193.0, 198.0, 203.0, 208.0, 213.0, 218.0, 223.0, 228.0, 233.0, 238.0, 243.0, 248.0, 253.0, 258.0, 263.0, 268.0, 273.0, 278.0, 283.0, 288.0, 293.0, 298.0, 303.0, 308.0, 313.0, 318.0, 323.1, 328.1, 333.1, 338.1, 343.1, 348.1, 353.1, 358.1, 364.4, 369.4, 374.4, 381.2, 386.2, 391.2, 396.2, 401.2, 406.2, 543.4, 553.7, 563.9, 574.2, 584.4, 594.7, 605.0, 615.2, 625.5, 638.0, 648.2, 658.5, 668.7, 679.0, 689.2, 699.5, 709.7, 720.0, 730.3, 740.5, 750.8, 761.0, 771.3, 781.5, 791.8, 802.1, 812.3, 822.6, 832.8, 843.1, 853.3, 863.6, 873.9, 884.1, 894.4, 904.6, 914.9, 925.1, 935.4, 945.7, 955.9, 966.3, 976.5, 986.8, 997.0, 1007.3, 1017.5, 1027.8, 1038.1, 1048.4, 1058.6, 1068.9, 1079.2, 1089.4, 1099.7, 1109.9, 1120.2, 1130.4, 1140.7];
+const gaps = [false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false];
+const rates = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 4.99, 9.6, 6.0, 4.0, 2.8, 1.8, 7.59, 3.58, 8.11, 4.77, 5.4, 8.19, 16.39, 63.37, 77.75, 46.57, 30.59, 27.79, 34.79, 30.19, 31.58, 21.99, 55.89, 35.56, 15.19, 43.59, 50.76, 45.17, 45.37, 24.99, 32.99, 42.37, 28.18, 39.39, 56.15, 25.59, 48.94, 59.25, 44.19, 18.38, 29.39, 13.58, 22.99, 44.78, 54.78, 16.19, 30.59, 36.78, 41.16, 59.78, 37.58, 29.59, 63.17, 76.17, 35.59, 42.78, 47.77, 19.19, 33.18, 42.95, 8.8, 20.78, 7.2, 3.2, 3.8, -4.2, 9.6, 1.6, 0.6, 0.64, 0.6, 0.0, 0.88, 0.4, 0.8, 1.4, 0.6, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -3.6, 0.39, 3.2, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0];
+const rolling = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.83, 2.43, 3.43, 4.1, 4.56, 4.86, 5.3, 4.29, 4.65, 4.78, 5.21, 6.27, 7.74, 17.71, 29.31, 36.28, 40.48, 43.74, 46.81, 41.28, 33.58, 29.49, 33.7, 35.0, 31.73, 33.97, 37.16, 41.03, 39.28, 37.51, 40.48, 40.28, 36.51, 35.55, 37.35, 37.44, 40.1, 42.92, 45.58, 42.08, 37.62, 35.62, 31.3, 28.88, 30.65, 30.28, 30.48, 34.35, 37.38, 39.88, 37.01, 39.25, 44.68, 51.24, 50.31, 47.48, 49.18, 47.45, 42.45, 36.91, 32.45, 28.78, 22.02, 19.35, 14.45, 6.6, 6.73, 3.53, 2.43, 2.01, 1.47, 2.17, 0.72, 0.52, 0.55, 0.68, 0.68, 0.85, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0];
+const ready = [200, 200, 200, 200, 200, 200, 225, 273, 303, 323, 337, 346, 384, 402, 443, 480, 507, 548, 630, 947, 1336, 1569, 1722, 1861, 2035, 2186, 2344, 2454, 2734, 2912, 2988, 3206, 3460, 3686, 3913, 4038, 4203, 4415, 4556, 4753, 5034, 5162, 5407, 5704, 5925, 6017, 6164, 6232, 6347, 6571, 6845, 6926, 7079, 7263, 7469, 7768, 7956, 8104, 8420, 8801, 8979, 9193, 9432, 9528, 9694, 9909, 9953, 10057, 10093, 10109, 10128, 10107, 10155, 10163, 10166, 10170, 10173, 10173, 10179, 10181, 10185, 10192, 10195, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10163, 10167, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200];
+const pending = [0, 0, 0, 4500, 7000, 10000, 9975, 9927, 9897, 9877, 9863, 9854, 9816, 9798, 9757, 9720, 9693, 9652, 9570, 9253, 8864, 8631, 8478, 8339, 8165, 8014, 7856, 7746, 7466, 7288, 7212, 6994, 6740, 6514, 6287, 6162, 5997, 5785, 5644, 5447, 5166, 5038, 4793, 4496, 4275, 4183, 4036, 3968, 3853, 3629, 3355, 3274, 3121, 2937, 2731, 2432, 2244, 2096, 1780, 1399, 1221, 1007, 768, 672, 506, 291, 247, 143, 107, 91, 72, 92, 45, 37, 34, 30, 27, 27, 21, 19, 15, 8, 5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+const total = [200, 200, 200, 4700, 7200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10199, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200];
+const rateData = ts.map((t, i) => ({x: t, y: rates[i]}));
+const readyData = ts.map((t, i) => ({x: t, y: ready[i]}));
+const pendingData = ts.map((t, i) => ({x: t, y: pending[i]}));
+const totalData = ts.map((t, i) => ({x: t, y: total[i]}));
+const rateColors = gaps.map(g => g ? 'rgba(255,165,0,0.6)' : '#e94560');
+const rateRadii = gaps.map(g => g ? 5 : 2);
+const rateYMax = 90.0;
+
+new Chart(document.getElementById('rateChart'), {
+  type: 'scatter',
+  data: {
+    datasets: [
+      { label: 'Ready Rate (pods/sec)', data: rateData, borderColor: '#e94560',
+        borderWidth: 2, pointBackgroundColor: rateColors, pointRadius: rateRadii,
+        showLine: true, fill: false, tension: 0.1 },
+
+    ]
+  },
+  options: {
+    responsive: true,
+    plugins: {
+      title: { display: true, text: 'Pod Ready Rate Over Time', color: '#eee' },
+      legend: { labels: { color: '#ccc' } },
+      tooltip: {
+        callbacks: {
+          afterLabel: function(ctx) {
+            if (gaps[ctx.dataIndex]) return '⚠ GAP: averaged over ' + (ts[ctx.dataIndex] - (ctx.dataIndex > 0 ? ts[ctx.dataIndex-1] : 0)).toFixed(0) + 's';
+            return '';
+          }
+        }
+      }
+    },
+    scales: {
+      x: { type: 'linear', title: { display: true, text: 'Seconds', color: '#aaa' },
+           ticks: { color: '#888', stepSize: 60 }, min: 0 },
+      y: { title: { display: true, text: 'Pods/sec', color: '#aaa' }, ticks: { color: '#888' },
+           min: 0, ...(rateYMax ? { max: rateYMax } : {}) }
+    }
+  }
+});
+
+new Chart(document.getElementById('countChart'), {
+  type: 'scatter',
+  data: {
+    datasets: [
+      { label: 'Ready', data: readyData, borderColor: '#4ecca3', borderWidth: 2,
+        pointRadius: 1, showLine: true, fill: true, backgroundColor: 'rgba(78,204,163,0.15)', tension: 0.1 },
+      { label: 'Pending', data: pendingData, borderColor: '#e94560', borderWidth: 2,
+        pointRadius: 1, showLine: true, fill: true, backgroundColor: 'rgba(233,69,96,0.15)', tension: 0.1 },
+      { label: 'Total', data: totalData, borderColor: '#888', borderWidth: 1,
+        pointRadius: 0, showLine: true, borderDash: [3,3], fill: false },
+    ]
+  },
+  options: {
+    responsive: true,
+    plugins: {
+      title: { display: true, text: 'Pod Counts Over Time', color: '#eee' },
+      legend: { labels: { color: '#ccc' } }
+    },
+    scales: {
+      x: { type: 'linear', title: { display: true, text: 'Seconds', color: '#aaa' },
+           ticks: { color: '#888', stepSize: 60 }, min: 0 },
+      y: { title: { display: true, text: 'Pods', color: '#aaa' }, ticks: { color: '#888' }, min: 0 }
+    }
+  }
+});
+</script>
+<div class="chart-box">
+<table>
+<tr><th style="text-align:left">Error</th><th>Count</th><th>Object</th><th style="text-align:left">Sample Message</th></tr>
+<tr><td style='color:#e94560'>Failed</td><td>9,288</td><td>Pod</td><td style='color:#999;font-size:12px'>Failed to pull image "polinux/stress-ng:latest": pull QPS exceeded</td></tr>
+<tr><td style='color:#e94560'>FailedCreatePodSandBox</td><td>923</td><td>Pod</td><td style='color:#999;font-size:12px'>Failed to create pod sandbox: rpc error: code = Unknown desc = failed to setup network for sandbox "ec80e575d4e16fe9aa3c781986fded84be3bd2c57a26cfc30d</td></tr>
+<tr><td style='color:#e94560'>ExceededGracePeriod</td><td>128</td><td>Pod</td><td style='color:#999;font-size:12px'>Container runtime did not kill the pod within specified grace period.</td></tr>
+<tr><td style='color:#e94560'>FailedCreatePodContainer</td><td>24</td><td>Pod</td><td style='color:#999;font-size:12px'>unable to ensure pod container exists: failed to create container for [kubepods burstable pod4b6dd7c4-eda6-4be6-a272-242a3041d39e] : unable to start u</td></tr>
+<tr><td style='color:#e94560'>FailedKillPod</td><td>1</td><td>Pod</td><td style='color:#999;font-size:12px'>error killing pod: failed to "KillContainer" for "pull-stress-ng" with KillContainerError: "rpc error: code = Unknown desc = failed to stop container </td></tr>
+
+</table>
+<div class='note'>13,417 FailedScheduling events filtered (expected during node provisioning)</div>
+</div>
+
+</body></html>

@@ -15,6 +15,8 @@ from k8s_scale_test.diagnostics import NodeDiagnosticsCollector
 from k8s_scale_test.evidence import EvidenceStore
 from k8s_scale_test.events import EventWatcher
 from k8s_scale_test.flux import FluxRepoReader, FluxRepoWriter
+from k8s_scale_test.health_sweep import HealthSweepAgent
+from k8s_scale_test.infra_health import InfraHealthAgent
 from k8s_scale_test.metrics import NodeMetricsAnalyzer
 from k8s_scale_test.models import (
     Alert,
@@ -53,6 +55,8 @@ class ScaleTestController:
         self._findings: list[Finding] = []
         self._paused = False
         self._namespaces: list[str] = []
+        self._health_sweep: dict = {}
+        self._karpenter_health: dict = {}
 
     async def run(self) -> TestRunSummary:
         """Execute the full test lifecycle.
@@ -125,7 +129,7 @@ class ScaleTestController:
             log.info("CL2 preload: launching concurrently with pod scaling")
             cl2_task = asyncio.create_task(self._run_cl2_preload())
 
-        # 3. Discover deployments and distribute target across apps
+        # 3. Discover deployments and apply role-based filtering
         reader = FluxRepoReader(self.config.flux_repo_path)
         writer = FluxRepoWriter(self.config.flux_repo_path)
         deployments = reader.get_deployments()
@@ -137,13 +141,70 @@ class ScaleTestController:
         if self.config.include_apps:
             included = set(self.config.include_apps)
             deployments = [d for d in deployments if d.name in included]
-        namespaces = list({d.namespace for d in deployments})
+
+        # 3a. Patch manifest resource requests from preflight sizing (Task 9.1)
+        if report.stressor_sizing:
+            sizing = report.stressor_sizing
+            cpu_req = f"{sizing.cpu_request_millicores}m"
+            mem_req = f"{sizing.memory_request_mi}Mi"
+            cpu_lim = f"{int(sizing.cpu_request_millicores * sizing.cpu_limit_multiplier)}m"
+            mem_lim = f"{int(sizing.memory_request_mi * sizing.memory_limit_multiplier)}Mi"
+            log.info("Patching stressor manifests: requests=%s/%s, limits=%s/%s",
+                     cpu_req, mem_req, cpu_lim, mem_lim)
+            for d in deployments:
+                if d.role == "stressor":
+                    writer.set_resource_requests(
+                        d.name, cpu_req, mem_req, cpu_lim, mem_lim, d.source_path
+                    )
+
+        # 3b. Separate deployments by role (Task 9.2)
+        stressors = [d for d in deployments if d.role == "stressor"]
+        infra = [d for d in deployments if d.role == "infrastructure"]
+        unlabeled = [d for d in deployments if d.role is None]
+        for d in unlabeled:
+            log.warning("Deployment %s has no scale-test/role label, excluding from distribution", d.name)
+
+        # Use all labeled deployments for namespace tracking
+        all_labeled = stressors + infra
+        namespaces = list({d.namespace for d in all_labeled})
         self._namespaces = namespaces
 
-        targets = writer.distribute_pods_across_deployments(
-            deployments, self.config.target_pods,
-        )
-        log.info("Distributing %d pods across %d deployments", self.config.target_pods, len(targets))
+        if not stressors:
+            log.warning("No stressor deployments found after filtering")
+
+        # 3c. Scale iperf3 servers first (Task 9.3)
+        if infra:
+            server_count = max(1, self.config.target_pods // self.config.iperf3_server_ratio)
+            infra_targets = [(d.name, server_count, d.source_path) for d in infra]
+            writer.set_replicas_batch(infra_targets)
+            log.info("Scaling %d infrastructure deployments to %d replicas each",
+                     len(infra), server_count)
+            await self._git_commit_push("scale-test: deploy iperf3 servers")
+            # Wait for servers to be ready before scaling stressors
+            log.info("Waiting for infrastructure pods to be ready...")
+            for _ in range(60):  # up to 5 minutes
+                ready, pending, _ = await self._count_pods()
+                if ready >= server_count * len(infra):
+                    break
+                await asyncio.sleep(5)
+            log.info("Infrastructure pods ready, proceeding with stressor scaling")
+
+        # 3d. Weighted or even distribution for stressors (Task 9.4)
+        if self.config.stressor_weights and stressors:
+            targets = writer.distribute_pods_weighted(
+                stressors, self.config.target_pods, self.config.stressor_weights
+            )
+            log.info("Weighted distribution of %d pods across %d stressors:", self.config.target_pods, len(stressors))
+            for name, count, _ in targets:
+                w = self.config.stressor_weights.get(name, 0.0)
+                log.info("  %s: weight=%.2f, replicas=%d", name, w, count)
+        elif stressors:
+            targets = writer.distribute_pods_across_deployments(
+                stressors, self.config.target_pods,
+            )
+            log.info("Even distribution of %d pods across %d stressors", self.config.target_pods, len(targets))
+        else:
+            targets = []
 
         # 4. Clean slate — delete existing events in target namespaces
         await self._delete_events(namespaces)
@@ -158,6 +219,8 @@ class ScaleTestController:
             self.evidence_store, run_id, self._prompt_operator,
             aws_client=self.aws_client,
         )
+        sweep_agent = HealthSweepAgent(self.k8s_client, node_diag, self.evidence_store, run_id)
+        infra_agent = InfraHealthAgent(self.k8s_client)
         monitor.on_alert(anomaly.handle_alert)
         watcher = EventWatcher(self.k8s_client, namespaces, self.evidence_store)
 
@@ -170,9 +233,12 @@ class ScaleTestController:
             result = await self._execute_scaling_via_flux(
                 writer, targets, deployments, anomaly,
             )
-        finally:
-            await monitor.stop()
-            await watcher.stop()
+        except Exception:
+            # If scaling fails, still run cleanup — but don't kill the monitor yet
+            raise
+
+        # 7. Check Karpenter health if we saw capacity errors during scaling
+        self._karpenter_health = await infra_agent.check_if_needed(self._findings)
 
         # 7. Hold at peak — wait for monitor to confirm target, then hold
         hold = getattr(self.config, 'hold_at_peak', 90)
@@ -183,11 +249,45 @@ class ScaleTestController:
             if ready >= target:
                 break
             await asyncio.sleep(5)
-        log.info("Holding at peak for %ds before cleanup...", hold)
-        await asyncio.sleep(hold)
+
+        # 7a. Hold at peak + node health sweep
+        # The sweep runs concurrently with the hold timer. We wait for BOTH
+        # to complete before cleanup — the sweep must finish so we can analyze
+        # results and give the operator a chance to investigate.
+        log.info("Holding at peak for %ds + running node health sweep...", hold)
+        health_sweep_task = asyncio.create_task(sweep_agent.run(sample_size=10))
+        hold_task = asyncio.create_task(asyncio.sleep(hold))
+
+        # Wait for both: hold timer AND sweep completion
+        await hold_task
+        try:
+            self._health_sweep = await asyncio.wait_for(health_sweep_task, timeout=60)
+        except asyncio.TimeoutError:
+            log.warning("Health sweep timed out after hold + 60s, proceeding with partial results")
+            self._health_sweep = {"nodes_sampled": 0, "healthy": 0,
+                                  "issues": [], "timed_out": True}
+            health_sweep_task.cancel()
+
+        # 7b. If sweep found issues, present to operator before cleanup
+        sweep_issues = self._health_sweep.get("issues", [])
+        if sweep_issues:
+            sampled = self._health_sweep.get("nodes_sampled", 0)
+            healthy = self._health_sweep.get("healthy", 0)
+            log.warning("Health sweep: %d/%d nodes have issues at peak load",
+                        sampled - healthy, sampled)
+            await self._prompt_operator(
+                f"Node health sweep found {len(sweep_issues)} issue(s) at peak load. "
+                f"Review before cleanup?",
+                {"sampled": sampled, "healthy": healthy,
+                 "issues": sweep_issues[:10]},
+            )
+
+        # 7c. NOW stop the monitor and watcher — after hold-at-peak is complete
+        await monitor.stop()
+        await watcher.stop()
 
         # 8. Cleanup pods — delete replicas and record delete rate
-        await self._cleanup_pods(writer, deployments)
+        await self._cleanup_pods(writer, all_labeled)
 
         # 8a. Collect CL2 result (if running concurrently)
         if cl2_task is not None:
@@ -395,6 +495,12 @@ class ScaleTestController:
             elapsed = (datetime.now(timezone.utc) - start).total_seconds()
             elapsed_min = elapsed / 60
 
+            # Track peak rate from the monitor (source of truth)
+            if self._monitor:
+                current_rate = self._monitor.get_current_rate()
+                if current_rate > peak_rate:
+                    peak_rate = current_rate
+
             # Log progress every 30s
             now = datetime.now(timezone.utc)
             if (now - last_log_time).total_seconds() >= 30:
@@ -466,6 +572,9 @@ class ScaleTestController:
                                 ", ".join(f"{r}={c}" for r, c in sorted(reasons.items(), key=lambda x: -x[1])[:5]))
         except Exception as exc:
             log.error("Diagnostics failed: %s", exc)
+
+
+
 
     async def _prompt_operator(self, message: str, context: dict) -> str:
         """Present a message to the operator and wait for input."""
@@ -642,6 +751,8 @@ class ScaleTestController:
             anomaly_count=len(self._findings),
             findings=self._findings,
             validity=validity, validity_reason=reason,
+            node_health_sweep=self._health_sweep or None,
+            karpenter_health=self._karpenter_health or None,
         )
 
     # ------------------------------------------------------------------

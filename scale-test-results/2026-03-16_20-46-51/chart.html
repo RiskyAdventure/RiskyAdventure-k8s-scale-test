@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8">
+<title>Scale Test — 2026-03-16_20-46-51</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+<style>
+body { font-family: -apple-system, sans-serif; margin: 20px; background: #1a1a2e; color: #eee; }
+.chart-box { background: #16213e; border-radius: 8px; padding: 20px; margin-bottom: 20px; }
+h1 { color: #e94560; margin-bottom: 4px; }
+.run-id { color: #888; font-size: 13px; margin-bottom: 16px; }
+.stats { display: flex; gap: 16px; margin-bottom: 20px; flex-wrap: wrap; }
+.stat { background: #0f3460; padding: 12px 20px; border-radius: 8px; }
+.stat .val { font-size: 24px; font-weight: bold; color: #e94560; }
+.stat .lbl { font-size: 11px; color: #aaa; }
+table { border-collapse: collapse; width: 100%; margin-bottom: 20px; }
+th, td { padding: 8px 14px; text-align: right; border-bottom: 1px solid #2a2a4a; }
+th { color: #aaa; font-size: 12px; text-transform: uppercase; }
+td { color: #ddd; font-size: 14px; }
+td:first-child, th:first-child { text-align: left; }
+.result { font-size: 18px; font-weight: bold; padding: 4px 12px; border-radius: 4px; display: inline-block; margin-bottom: 12px; }
+.result.pass { background: #1b4332; color: #4ecca3; }
+.result.fail { background: #4a1525; color: #e94560; }
+.note { color: #666; font-size: 11px; margin-top: 4px; }
+.data-table { max-height: 400px; overflow-y: auto; }
+.data-table table { font-size: 12px; }
+.data-table td, .data-table th { padding: 4px 10px; white-space: nowrap; }
+</style></head><body>
+<h1>Scale Test Results</h1>
+<div class="run-id">2026-03-16_20-46-51</div>
+<div class="result pass">PASSED — success</div>
+
+<div class="chart-box">
+<table>
+<tr><th style="text-align:left">Metric</th><th>Value</th></tr>
+<tr><td style="color:#aaa">Target</td><td>10,000 pods</td></tr>
+<tr><td style="color:#aaa">Reached</td><td>10,200 pods</td></tr>
+<tr><td style="color:#aaa">Scaling Duration</td><td>11.8m (706s)</td></tr>
+<tr><td style="color:#aaa">Avg Rate</td><td>14.2 pods/s</td></tr>
+<tr><td style="color:#aaa">Peak Rate (clean)</td><td>80.6 pods/s</td></tr>
+<tr><td style="color:#aaa">Nodes</td><td>244</td></tr>
+<tr><td style="color:#aaa">Anomalies</td><td>1</td></tr>
+<tr><td style="color:#aaa">Data Points</td><td>243 (0 gaps)</td></tr>
+</table>
+</div>
+
+<div style="color:#888;font-size:13px;margin-bottom:16px">Node provisioning: 55s before first pod ready.</div>
+
+
+
+<div class="chart-box data-table">
+<table>
+<tr><th>Elapsed</th><th>Time</th><th>Ready</th><th>Pending</th><th>Total</th><th>Rate/s</th><th>Interval</th><th>Gap</th></tr>
+<tr><td>0s</td><td>20:52:17</td><td>0</td><td>0</td><td>0</td><td>0.0</td><td>0.0s</td><td></td></tr>
+<tr><td>5s</td><td>20:52:22</td><td>0</td><td>0</td><td>0</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>10s</td><td>20:52:27</td><td>0</td><td>0</td><td>0</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>15s</td><td>20:52:32</td><td>0</td><td>0</td><td>0</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>20s</td><td>20:52:37</td><td>0</td><td>0</td><td>0</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>25s</td><td>20:52:42</td><td>0</td><td>0</td><td>0</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>30s</td><td>20:52:47</td><td>0</td><td>0</td><td>0</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>35s</td><td>20:52:52</td><td>0</td><td>0</td><td>0</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>40s</td><td>20:52:57</td><td>0</td><td>0</td><td>0</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>45s</td><td>20:53:02</td><td>0</td><td>0</td><td>0</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>50s</td><td>20:53:07</td><td>0</td><td>0</td><td>0</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>55s</td><td>20:53:12</td><td>0</td><td>0</td><td>0</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>60s</td><td>20:53:17</td><td>0</td><td>0</td><td>0</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>65s</td><td>20:53:22</td><td>0</td><td>0</td><td>0</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>70s</td><td>20:53:27</td><td>0</td><td>0</td><td>0</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>75s</td><td>20:53:32</td><td>0</td><td>0</td><td>0</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>80s</td><td>20:53:37</td><td>0</td><td>0</td><td>0</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>85s</td><td>20:53:42</td><td>0</td><td>0</td><td>0</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>90s</td><td>20:53:47</td><td>0</td><td>0</td><td>0</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>95s</td><td>20:53:52</td><td>0</td><td>0</td><td>0</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>100s</td><td>20:53:57</td><td>0</td><td>0</td><td>0</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>105s</td><td>20:54:02</td><td>0</td><td>0</td><td>0</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>110s</td><td>20:54:07</td><td>0</td><td>0</td><td>0</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>115s</td><td>20:54:12</td><td>0</td><td>0</td><td>0</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>120s</td><td>20:54:17</td><td>0</td><td>0</td><td>0</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>125s</td><td>20:54:22</td><td>0</td><td>0</td><td>0</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>130s</td><td>20:54:27</td><td>0</td><td>0</td><td>0</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>135s</td><td>20:54:32</td><td>0</td><td>0</td><td>0</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>140s</td><td>20:54:37</td><td>0</td><td>0</td><td>0</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>145s</td><td>20:54:43</td><td>0</td><td>0</td><td>0</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>150s</td><td>20:54:48</td><td>0</td><td>0</td><td>0</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>155s</td><td>20:54:53</td><td>0</td><td>0</td><td>0</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>160s</td><td>20:54:58</td><td>0</td><td>0</td><td>0</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>165s</td><td>20:55:03</td><td>0</td><td>0</td><td>0</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>170s</td><td>20:55:08</td><td>0</td><td>0</td><td>0</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>175s</td><td>20:55:13</td><td>0</td><td>0</td><td>0</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>180s</td><td>20:55:18</td><td>0</td><td>0</td><td>0</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>185s</td><td>20:55:23</td><td>0</td><td>0</td><td>0</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>190s</td><td>20:55:28</td><td>0</td><td>0</td><td>0</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>195s</td><td>20:55:33</td><td>0</td><td>0</td><td>0</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>200s</td><td>20:55:38</td><td>0</td><td>0</td><td>0</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>205s</td><td>20:55:43</td><td>0</td><td>0</td><td>0</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>210s</td><td>20:55:48</td><td>0</td><td>0</td><td>0</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>215s</td><td>20:55:53</td><td>0</td><td>0</td><td>0</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>220s</td><td>20:55:58</td><td>0</td><td>0</td><td>0</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>225s</td><td>20:56:03</td><td>0</td><td>0</td><td>0</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>230s</td><td>20:56:08</td><td>0</td><td>0</td><td>0</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>235s</td><td>20:56:13</td><td>0</td><td>0</td><td>0</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>240s</td><td>20:56:18</td><td>0</td><td>0</td><td>0</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>245s</td><td>20:56:23</td><td>0</td><td>0</td><td>0</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>250s</td><td>20:56:28</td><td>0</td><td>0</td><td>0</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>255s</td><td>20:56:33</td><td>0</td><td>0</td><td>0</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>260s</td><td>20:56:38</td><td>0</td><td>0</td><td>0</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>265s</td><td>20:56:43</td><td>0</td><td>0</td><td>0</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>270s</td><td>20:56:48</td><td>0</td><td>0</td><td>0</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>275s</td><td>20:56:53</td><td>0</td><td>0</td><td>0</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>280s</td><td>20:56:58</td><td>0</td><td>0</td><td>0</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>285s</td><td>20:57:03</td><td>0</td><td>0</td><td>0</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>290s</td><td>20:57:08</td><td>0</td><td>0</td><td>0</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>295s</td><td>20:57:13</td><td>0</td><td>0</td><td>0</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>300s</td><td>20:57:18</td><td>0</td><td>0</td><td>0</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>305s</td><td>20:57:23</td><td>0</td><td>0</td><td>0</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>310s</td><td>20:57:28</td><td>0</td><td>0</td><td>0</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>315s</td><td>20:57:33</td><td>0</td><td>0</td><td>0</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>320s</td><td>20:57:38</td><td>0</td><td>0</td><td>0</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>325s</td><td>20:57:43</td><td>0</td><td>0</td><td>0</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>330s</td><td>20:57:48</td><td>0</td><td>0</td><td>0</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>335s</td><td>20:57:53</td><td>0</td><td>0</td><td>0</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>340s</td><td>20:57:58</td><td>0</td><td>0</td><td>0</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>345s</td><td>20:58:03</td><td>0</td><td>0</td><td>0</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>350s</td><td>20:58:08</td><td>0</td><td>0</td><td>0</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>355s</td><td>20:58:13</td><td>0</td><td>0</td><td>0</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>360s</td><td>20:58:18</td><td>0</td><td>0</td><td>0</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>365s</td><td>20:58:23</td><td>0</td><td>0</td><td>0</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>370s</td><td>20:58:28</td><td>0</td><td>0</td><td>0</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>375s</td><td>20:58:33</td><td>0</td><td>0</td><td>0</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>380s</td><td>20:58:38</td><td>0</td><td>0</td><td>0</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>385s</td><td>20:58:43</td><td>0</td><td>0</td><td>0</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>390s</td><td>20:58:48</td><td>0</td><td>0</td><td>0</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>395s</td><td>20:58:53</td><td>0</td><td>0</td><td>0</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>400s</td><td>20:58:58</td><td>0</td><td>0</td><td>0</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>405s</td><td>20:59:03</td><td>0</td><td>0</td><td>0</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>410s</td><td>20:59:08</td><td>0</td><td>0</td><td>0</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>415s</td><td>20:59:13</td><td>0</td><td>0</td><td>0</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>420s</td><td>20:59:18</td><td>0</td><td>0</td><td>0</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>425s</td><td>20:59:23</td><td>0</td><td>0</td><td>0</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>430s</td><td>20:59:28</td><td>0</td><td>0</td><td>0</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>435s</td><td>20:59:33</td><td>0</td><td>0</td><td>0</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>440s</td><td>20:59:38</td><td>0</td><td>0</td><td>0</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>445s</td><td>20:59:43</td><td>0</td><td>0</td><td>0</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>450s</td><td>20:59:48</td><td>0</td><td>0</td><td>0</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>455s</td><td>20:59:53</td><td>0</td><td>0</td><td>0</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>460s</td><td>20:59:58</td><td>0</td><td>200</td><td>200</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>465s</td><td>21:00:03</td><td>0</td><td>200</td><td>200</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>470s</td><td>21:00:08</td><td>0</td><td>200</td><td>200</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>475s</td><td>21:00:13</td><td>0</td><td>200</td><td>200</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>480s</td><td>21:00:18</td><td>0</td><td>200</td><td>200</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>485s</td><td>21:00:23</td><td>0</td><td>200</td><td>200</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>490s</td><td>21:00:28</td><td>0</td><td>200</td><td>200</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>495s</td><td>21:00:33</td><td>0</td><td>200</td><td>200</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>500s</td><td>21:00:38</td><td>0</td><td>200</td><td>200</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>505s</td><td>21:00:43</td><td>0</td><td>200</td><td>200</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>510s</td><td>21:00:48</td><td>0</td><td>200</td><td>200</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>515s</td><td>21:00:53</td><td>3</td><td>197</td><td>200</td><td>0.6</td><td>5.0s</td><td></td></tr>
+<tr><td>520s</td><td>21:00:58</td><td>14</td><td>186</td><td>200</td><td>2.2</td><td>5.0s</td><td></td></tr>
+<tr><td>525s</td><td>21:01:03</td><td>15</td><td>185</td><td>200</td><td>0.2</td><td>5.0s</td><td></td></tr>
+<tr><td>530s</td><td>21:01:08</td><td>15</td><td>185</td><td>200</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>535s</td><td>21:01:13</td><td>16</td><td>184</td><td>200</td><td>0.2</td><td>5.0s</td><td></td></tr>
+<tr><td>540s</td><td>21:01:18</td><td>16</td><td>184</td><td>200</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>545s</td><td>21:01:23</td><td>21</td><td>179</td><td>200</td><td>1.0</td><td>5.0s</td><td></td></tr>
+<tr><td>550s</td><td>21:01:28</td><td>21</td><td>179</td><td>200</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>555s</td><td>21:01:33</td><td>24</td><td>176</td><td>200</td><td>0.6</td><td>5.0s</td><td></td></tr>
+<tr><td>560s</td><td>21:01:38</td><td>30</td><td>170</td><td>200</td><td>1.2</td><td>5.0s</td><td></td></tr>
+<tr><td>565s</td><td>21:01:43</td><td>30</td><td>170</td><td>200</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>570s</td><td>21:01:48</td><td>87</td><td>113</td><td>200</td><td>11.4</td><td>5.0s</td><td></td></tr>
+<tr><td>575s</td><td>21:01:53</td><td>103</td><td>97</td><td>200</td><td>3.2</td><td>5.0s</td><td></td></tr>
+<tr><td>580s</td><td>21:01:58</td><td>123</td><td>77</td><td>200</td><td>4.0</td><td>5.0s</td><td></td></tr>
+<tr><td>585s</td><td>21:02:03</td><td>135</td><td>65</td><td>200</td><td>2.4</td><td>5.0s</td><td></td></tr>
+<tr><td>590s</td><td>21:02:08</td><td>135</td><td>65</td><td>200</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>595s</td><td>21:02:13</td><td>136</td><td>64</td><td>200</td><td>0.2</td><td>5.0s</td><td></td></tr>
+<tr><td>600s</td><td>21:02:18</td><td>139</td><td>61</td><td>200</td><td>0.6</td><td>5.0s</td><td></td></tr>
+<tr><td>605s</td><td>21:02:23</td><td>143</td><td>57</td><td>200</td><td>0.8</td><td>5.0s</td><td></td></tr>
+<tr><td>610s</td><td>21:02:28</td><td>149</td><td>51</td><td>200</td><td>1.2</td><td>5.0s</td><td></td></tr>
+<tr><td>615s</td><td>21:02:33</td><td>152</td><td>48</td><td>200</td><td>0.6</td><td>5.0s</td><td></td></tr>
+<tr><td>620s</td><td>21:02:38</td><td>156</td><td>44</td><td>200</td><td>0.8</td><td>5.0s</td><td></td></tr>
+<tr><td>625s</td><td>21:02:43</td><td>156</td><td>44</td><td>200</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>630s</td><td>21:02:48</td><td>158</td><td>42</td><td>200</td><td>0.4</td><td>5.0s</td><td></td></tr>
+<tr><td>635s</td><td>21:02:53</td><td>163</td><td>37</td><td>200</td><td>1.0</td><td>5.0s</td><td></td></tr>
+<tr><td>640s</td><td>21:02:58</td><td>163</td><td>37</td><td>200</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>645s</td><td>21:03:03</td><td>163</td><td>37</td><td>200</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>650s</td><td>21:03:08</td><td>163</td><td>37</td><td>200</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>655s</td><td>21:03:13</td><td>163</td><td>37</td><td>200</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>660s</td><td>21:03:18</td><td>176</td><td>24</td><td>200</td><td>2.6</td><td>5.0s</td><td></td></tr>
+<tr><td>665s</td><td>21:03:23</td><td>179</td><td>21</td><td>200</td><td>0.6</td><td>5.0s</td><td></td></tr>
+<tr><td>670s</td><td>21:03:28</td><td>179</td><td>21</td><td>200</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>675s</td><td>21:03:33</td><td>192</td><td>8</td><td>200</td><td>2.6</td><td>5.0s</td><td></td></tr>
+<tr><td>680s</td><td>21:03:38</td><td>199</td><td>1</td><td>200</td><td>1.4</td><td>5.0s</td><td></td></tr>
+<tr><td>685s</td><td>21:03:43</td><td>200</td><td>0</td><td>200</td><td>0.2</td><td>5.0s</td><td></td></tr>
+<tr><td>690s</td><td>21:03:48</td><td>200</td><td>0</td><td>200</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>695s</td><td>21:03:53</td><td>200</td><td>0</td><td>200</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>700s</td><td>21:03:58</td><td>200</td><td>0</td><td>200</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>705s</td><td>21:04:03</td><td>200</td><td>0</td><td>200</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>710s</td><td>21:04:08</td><td>200</td><td>0</td><td>200</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>715s</td><td>21:04:13</td><td>200</td><td>0</td><td>200</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>720s</td><td>21:04:18</td><td>200</td><td>0</td><td>200</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>725s</td><td>21:04:23</td><td>200</td><td>0</td><td>200</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>730s</td><td>21:04:28</td><td>200</td><td>0</td><td>200</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>735s</td><td>21:04:33</td><td>200</td><td>0</td><td>200</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>740s</td><td>21:04:38</td><td>200</td><td>0</td><td>200</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>745s</td><td>21:04:43</td><td>200</td><td>0</td><td>200</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>750s</td><td>21:04:48</td><td>200</td><td>0</td><td>200</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>755s</td><td>21:04:53</td><td>200</td><td>0</td><td>200</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>760s</td><td>21:04:58</td><td>200</td><td>0</td><td>200</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>765s</td><td>21:05:03</td><td>200</td><td>0</td><td>200</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>770s</td><td>21:05:08</td><td>200</td><td>5,000</td><td>5,200</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>775s</td><td>21:05:13</td><td>200</td><td>8,000</td><td>8,200</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>780s</td><td>21:05:18</td><td>200</td><td>10,000</td><td>10,200</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>785s</td><td>21:05:23</td><td>201</td><td>9,999</td><td>10,200</td><td>0.2</td><td>5.0s</td><td></td></tr>
+<tr><td>790s</td><td>21:05:28</td><td>224</td><td>9,976</td><td>10,200</td><td>4.6</td><td>5.0s</td><td></td></tr>
+<tr><td>796s</td><td>21:05:33</td><td>229</td><td>9,971</td><td>10,200</td><td>1.0</td><td>5.0s</td><td></td></tr>
+<tr><td>801s</td><td>21:05:38</td><td>250</td><td>9,950</td><td>10,200</td><td>4.2</td><td>5.0s</td><td></td></tr>
+<tr><td>806s</td><td>21:05:43</td><td>268</td><td>9,932</td><td>10,200</td><td>3.6</td><td>5.0s</td><td></td></tr>
+<tr><td>811s</td><td>21:05:48</td><td>282</td><td>9,918</td><td>10,200</td><td>2.8</td><td>5.0s</td><td></td></tr>
+<tr><td>816s</td><td>21:05:53</td><td>337</td><td>9,863</td><td>10,200</td><td>11.0</td><td>5.0s</td><td></td></tr>
+<tr><td>821s</td><td>21:05:58</td><td>357</td><td>9,843</td><td>10,200</td><td>4.0</td><td>5.0s</td><td></td></tr>
+<tr><td>826s</td><td>21:06:03</td><td>362</td><td>9,838</td><td>10,200</td><td>1.0</td><td>5.0s</td><td></td></tr>
+<tr><td>831s</td><td>21:06:08</td><td>392</td><td>9,808</td><td>10,200</td><td>6.0</td><td>5.0s</td><td></td></tr>
+<tr><td>836s</td><td>21:06:13</td><td>558</td><td>9,642</td><td>10,200</td><td>33.2</td><td>5.0s</td><td></td></tr>
+<tr><td>841s</td><td>21:06:18</td><td>639</td><td>9,561</td><td>10,200</td><td>16.2</td><td>5.0s</td><td></td></tr>
+<tr><td>846s</td><td>21:06:23</td><td>743</td><td>9,457</td><td>10,200</td><td>20.8</td><td>5.0s</td><td></td></tr>
+<tr><td>851s</td><td>21:06:28</td><td>791</td><td>9,409</td><td>10,200</td><td>9.6</td><td>5.0s</td><td></td></tr>
+<tr><td>856s</td><td>21:06:33</td><td>910</td><td>9,290</td><td>10,200</td><td>23.8</td><td>5.0s</td><td></td></tr>
+<tr><td>861s</td><td>21:06:38</td><td>1,017</td><td>9,183</td><td>10,200</td><td>21.4</td><td>5.0s</td><td></td></tr>
+<tr><td>866s</td><td>21:06:43</td><td>1,165</td><td>9,035</td><td>10,200</td><td>29.6</td><td>5.0s</td><td></td></tr>
+<tr><td>871s</td><td>21:06:48</td><td>1,310</td><td>8,890</td><td>10,200</td><td>29.0</td><td>5.0s</td><td></td></tr>
+<tr><td>876s</td><td>21:06:53</td><td>1,480</td><td>8,720</td><td>10,200</td><td>34.0</td><td>5.0s</td><td></td></tr>
+<tr><td>881s</td><td>21:06:58</td><td>1,711</td><td>8,489</td><td>10,200</td><td>46.2</td><td>5.0s</td><td></td></tr>
+<tr><td>886s</td><td>21:07:03</td><td>1,980</td><td>8,220</td><td>10,200</td><td>53.7</td><td>5.0s</td><td></td></tr>
+<tr><td>891s</td><td>21:07:08</td><td>2,220</td><td>7,980</td><td>10,200</td><td>48.0</td><td>5.0s</td><td></td></tr>
+<tr><td>896s</td><td>21:07:13</td><td>2,475</td><td>7,725</td><td>10,200</td><td>51.0</td><td>5.0s</td><td></td></tr>
+<tr><td>901s</td><td>21:07:18</td><td>2,690</td><td>7,510</td><td>10,200</td><td>43.0</td><td>5.0s</td><td></td></tr>
+<tr><td>906s</td><td>21:07:23</td><td>2,909</td><td>7,291</td><td>10,200</td><td>43.8</td><td>5.0s</td><td></td></tr>
+<tr><td>911s</td><td>21:07:28</td><td>3,143</td><td>7,057</td><td>10,200</td><td>46.8</td><td>5.0s</td><td></td></tr>
+<tr><td>916s</td><td>21:07:33</td><td>3,307</td><td>6,893</td><td>10,200</td><td>32.8</td><td>5.0s</td><td></td></tr>
+<tr><td>921s</td><td>21:07:38</td><td>3,489</td><td>6,711</td><td>10,200</td><td>36.4</td><td>5.0s</td><td></td></tr>
+<tr><td>926s</td><td>21:07:43</td><td>3,817</td><td>6,383</td><td>10,200</td><td>65.6</td><td>5.0s</td><td></td></tr>
+<tr><td>931s</td><td>21:07:48</td><td>4,075</td><td>6,125</td><td>10,200</td><td>51.5</td><td>5.0s</td><td></td></tr>
+<tr><td>936s</td><td>21:07:53</td><td>4,269</td><td>5,931</td><td>10,200</td><td>38.5</td><td>5.0s</td><td></td></tr>
+<tr><td>941s</td><td>21:07:58</td><td>4,519</td><td>5,681</td><td>10,200</td><td>50.0</td><td>5.0s</td><td></td></tr>
+<tr><td>946s</td><td>21:08:03</td><td>4,796</td><td>5,404</td><td>10,200</td><td>55.4</td><td>5.0s</td><td></td></tr>
+<tr><td>951s</td><td>21:08:08</td><td>4,956</td><td>5,244</td><td>10,200</td><td>32.0</td><td>5.0s</td><td></td></tr>
+<tr><td>956s</td><td>21:08:13</td><td>5,098</td><td>5,102</td><td>10,200</td><td>28.4</td><td>5.0s</td><td></td></tr>
+<tr><td>961s</td><td>21:08:18</td><td>5,331</td><td>4,869</td><td>10,200</td><td>46.6</td><td>5.0s</td><td></td></tr>
+<tr><td>966s</td><td>21:08:23</td><td>5,513</td><td>4,687</td><td>10,200</td><td>36.4</td><td>5.0s</td><td></td></tr>
+<tr><td>971s</td><td>21:08:28</td><td>5,640</td><td>4,560</td><td>10,200</td><td>25.4</td><td>5.0s</td><td></td></tr>
+<tr><td>976s</td><td>21:08:33</td><td>5,852</td><td>4,348</td><td>10,200</td><td>42.4</td><td>5.0s</td><td></td></tr>
+<tr><td>981s</td><td>21:08:38</td><td>5,984</td><td>4,216</td><td>10,200</td><td>26.4</td><td>5.0s</td><td></td></tr>
+<tr><td>986s</td><td>21:08:43</td><td>6,281</td><td>3,919</td><td>10,200</td><td>59.4</td><td>5.0s</td><td></td></tr>
+<tr><td>991s</td><td>21:08:48</td><td>6,455</td><td>3,745</td><td>10,200</td><td>34.8</td><td>5.0s</td><td></td></tr>
+<tr><td>996s</td><td>21:08:53</td><td>6,579</td><td>3,621</td><td>10,200</td><td>24.8</td><td>5.0s</td><td></td></tr>
+<tr><td>1001s</td><td>21:08:58</td><td>6,645</td><td>3,555</td><td>10,200</td><td>13.2</td><td>5.0s</td><td></td></tr>
+<tr><td>1006s</td><td>21:09:03</td><td>6,714</td><td>3,486</td><td>10,200</td><td>13.8</td><td>5.0s</td><td></td></tr>
+<tr><td>1011s</td><td>21:09:08</td><td>6,865</td><td>3,335</td><td>10,200</td><td>30.2</td><td>5.0s</td><td></td></tr>
+<tr><td>1016s</td><td>21:09:13</td><td>7,053</td><td>3,147</td><td>10,200</td><td>37.5</td><td>5.0s</td><td></td></tr>
+<tr><td>1021s</td><td>21:09:18</td><td>7,218</td><td>2,982</td><td>10,200</td><td>33.0</td><td>5.0s</td><td></td></tr>
+<tr><td>1026s</td><td>21:09:23</td><td>7,454</td><td>2,746</td><td>10,200</td><td>47.2</td><td>5.0s</td><td></td></tr>
+<tr><td>1031s</td><td>21:09:28</td><td>7,675</td><td>2,525</td><td>10,200</td><td>44.2</td><td>5.0s</td><td></td></tr>
+<tr><td>1036s</td><td>21:09:33</td><td>8,078</td><td>2,122</td><td>10,200</td><td>80.6</td><td>5.0s</td><td></td></tr>
+<tr><td>1041s</td><td>21:09:38</td><td>8,334</td><td>1,866</td><td>10,200</td><td>51.2</td><td>5.0s</td><td></td></tr>
+<tr><td>1046s</td><td>21:09:43</td><td>8,577</td><td>1,623</td><td>10,200</td><td>48.6</td><td>5.0s</td><td></td></tr>
+<tr><td>1051s</td><td>21:09:48</td><td>8,925</td><td>1,275</td><td>10,200</td><td>69.6</td><td>5.0s</td><td></td></tr>
+<tr><td>1056s</td><td>21:09:53</td><td>9,264</td><td>936</td><td>10,200</td><td>67.8</td><td>5.0s</td><td></td></tr>
+<tr><td>1061s</td><td>21:09:58</td><td>9,376</td><td>824</td><td>10,200</td><td>22.4</td><td>5.0s</td><td></td></tr>
+<tr><td>1066s</td><td>21:10:03</td><td>9,442</td><td>758</td><td>10,200</td><td>13.2</td><td>5.0s</td><td></td></tr>
+<tr><td>1071s</td><td>21:10:08</td><td>9,589</td><td>611</td><td>10,200</td><td>28.2</td><td>5.2s</td><td></td></tr>
+<tr><td>1076s</td><td>21:10:13</td><td>9,759</td><td>441</td><td>10,200</td><td>34.0</td><td>5.0s</td><td></td></tr>
+<tr><td>1081s</td><td>21:10:18</td><td>9,840</td><td>360</td><td>10,200</td><td>16.2</td><td>5.0s</td><td></td></tr>
+<tr><td>1086s</td><td>21:10:23</td><td>9,921</td><td>279</td><td>10,200</td><td>16.2</td><td>5.0s</td><td></td></tr>
+<tr><td>1091s</td><td>21:10:28</td><td>10,027</td><td>173</td><td>10,200</td><td>21.2</td><td>5.0s</td><td></td></tr>
+<tr><td>1096s</td><td>21:10:33</td><td>10,058</td><td>142</td><td>10,200</td><td>6.2</td><td>5.0s</td><td></td></tr>
+<tr><td>1101s</td><td>21:10:38</td><td>10,087</td><td>113</td><td>10,200</td><td>5.8</td><td>5.0s</td><td></td></tr>
+<tr><td>1106s</td><td>21:10:43</td><td>10,104</td><td>96</td><td>10,200</td><td>3.4</td><td>5.0s</td><td></td></tr>
+<tr><td>1111s</td><td>21:10:49</td><td>10,126</td><td>74</td><td>10,200</td><td>4.2</td><td>5.2s</td><td></td></tr>
+<tr><td>1116s</td><td>21:10:54</td><td>10,150</td><td>50</td><td>10,200</td><td>4.8</td><td>5.0s</td><td></td></tr>
+<tr><td>1121s</td><td>21:10:59</td><td>10,167</td><td>33</td><td>10,200</td><td>3.4</td><td>5.0s</td><td></td></tr>
+<tr><td>1126s</td><td>21:11:04</td><td>10,187</td><td>13</td><td>10,200</td><td>4.0</td><td>5.0s</td><td></td></tr>
+<tr><td>1131s</td><td>21:11:09</td><td>10,192</td><td>8</td><td>10,200</td><td>1.0</td><td>5.0s</td><td></td></tr>
+<tr><td>1136s</td><td>21:11:14</td><td>10,193</td><td>7</td><td>10,200</td><td>0.2</td><td>5.0s</td><td></td></tr>
+<tr><td>1141s</td><td>21:11:19</td><td>10,196</td><td>4</td><td>10,200</td><td>0.6</td><td>5.0s</td><td></td></tr>
+<tr><td>1146s</td><td>21:11:24</td><td>10,198</td><td>2</td><td>10,200</td><td>0.4</td><td>5.0s</td><td></td></tr>
+<tr><td>1151s</td><td>21:11:29</td><td>10,198</td><td>2</td><td>10,200</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>1156s</td><td>21:11:34</td><td>10,198</td><td>2</td><td>10,200</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>1162s</td><td>21:11:39</td><td>10,199</td><td>1</td><td>10,200</td><td>0.2</td><td>5.6s</td><td></td></tr>
+<tr><td>1167s</td><td>21:11:44</td><td>10,200</td><td>0</td><td>10,200</td><td>0.2</td><td>5.0s</td><td></td></tr>
+<tr><td>1300s</td><td>21:13:58</td><td>10,200</td><td>0</td><td>10,200</td><td>0.0</td><td>12.2s</td><td></td></tr>
+<tr><td>1311s</td><td>21:14:08</td><td>10,200</td><td>0</td><td>10,200</td><td>0.0</td><td>10.2s</td><td></td></tr>
+<tr><td>1321s</td><td>21:14:18</td><td>10,200</td><td>0</td><td>10,200</td><td>0.0</td><td>10.2s</td><td></td></tr>
+<tr><td>1331s</td><td>21:14:28</td><td>10,200</td><td>0</td><td>10,200</td><td>0.0</td><td>10.2s</td><td></td></tr>
+<tr><td>1341s</td><td>21:14:39</td><td>10,200</td><td>0</td><td>10,200</td><td>0.0</td><td>10.2s</td><td></td></tr>
+<tr><td>1351s</td><td>21:14:49</td><td>10,200</td><td>0</td><td>10,200</td><td>0.0</td><td>10.2s</td><td></td></tr>
+<tr><td>1362s</td><td>21:14:59</td><td>10,000</td><td>0</td><td>10,000</td><td>-19.5</td><td>10.3s</td><td></td></tr>
+<tr><td>1372s</td><td>21:15:09</td><td>3,500</td><td>0</td><td>3,500</td><td>-635.0</td><td>10.2s</td><td></td></tr>
+<tr><td>1382s</td><td>21:15:20</td><td>0</td><td>0</td><td>0</td><td>-342.1</td><td>10.2s</td><td></td></tr>
+
+</table>
+</div>
+
+<div class="chart-box">
+<canvas id="rateChart" height="100"></canvas>
+<div class="note">Y axis capped at p95 × 1.5 to avoid spike distortion</div>
+</div>
+<div class="chart-box">
+<canvas id="countChart" height="100"></canvas>
+</div>
+
+<script>
+const ts = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0.0, 5.0, 10.0, 15.0, 20.0, 25.0, 30.0, 35.0, 40.0, 45.0, 50.1, 55.1, 60.1, 65.1, 70.1, 75.1, 80.1, 85.1, 90.1, 95.1, 100.1, 105.1, 110.1, 115.1, 120.1, 125.1, 130.1, 135.1, 140.1, 145.1, 150.1, 155.1, 160.1, 165.1, 170.1, 175.1, 180.1, 185.1, 190.1, 195.1, 200.1, 205.1, 210.1, 215.1, 220.1, 225.1, 230.1, 235.1, 240.1, 245.1, 250.2, 255.2, 260.2, 265.2, 270.2, 275.2, 280.2, 285.2, 290.2, 295.2, 300.2, 305.2, 310.2, 315.2, 320.2, 325.2, 330.2, 335.2, 340.2, 345.2, 350.2, 355.2, 360.2, 365.2, 370.2, 375.2, 380.2, 385.2, 390.2, 395.2, 400.2, 405.2, 410.2, 415.2, 420.3, 425.3, 430.3, 435.3, 440.3, 445.3, 450.3, 455.3, 460.3, 465.3, 470.3, 475.3, 480.3, 485.3, 490.3, 495.3, 500.3, 505.3, 510.4, 515.4, 520.4, 525.4, 530.4, 535.4, 540.4, 545.4, 550.4, 555.4, 560.4, 565.4, 570.4, 575.4, 580.4, 585.4, 590.4, 595.4, 600.4, 605.4, 610.6, 615.6, 620.6, 625.6, 630.6, 635.6, 640.6, 645.6, 650.8, 655.8, 660.8, 665.8, 670.8, 675.8, 680.8, 685.8, 690.8, 695.8, 701.4, 706.4, 840.0, 850.2, 860.5, 870.7, 881.0, 891.2, 901.5, 911.7, 921.9];
+const gaps = [false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false];
+const rates = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.6, 2.2, 0.2, 0.0, 0.2, 0.0, 1.0, 0.0, 0.6, 1.2, 0.0, 11.4, 3.2, 4.0, 2.4, 0.0, 0.2, 0.6, 0.8, 1.2, 0.6, 0.8, 0.0, 0.4, 1.0, 0.0, 0.0, 0.0, 0.0, 2.6, 0.6, 0.0, 2.6, 1.4, 0.2, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.2, 4.6, 1.0, 4.2, 3.6, 2.8, 11.0, 4.0, 1.0, 6.0, 33.18, 16.2, 20.77, 9.6, 23.78, 21.39, 29.56, 28.97, 33.96, 46.17, 53.66, 47.98, 50.98, 42.97, 43.77, 46.78, 32.78, 36.38, 65.58, 51.49, 38.51, 49.98, 55.38, 31.98, 28.39, 46.58, 36.38, 25.38, 42.37, 26.39, 59.37, 34.79, 24.79, 13.2, 13.79, 30.19, 37.52, 32.98, 47.17, 44.18, 80.58, 51.18, 48.58, 69.57, 67.77, 22.39, 13.19, 28.23, 33.98, 16.19, 16.19, 21.19, 6.2, 5.8, 3.4, 4.23, 4.8, 3.4, 4.0, 1.0, 0.2, 0.6, 0.4, 0.0, 0.0, 0.18, 0.2, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -19.49, -635.0, -342.13];
+const rolling = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.1, 0.47, 0.5, 0.5, 0.53, 0.53, 0.6, 0.23, 0.3, 0.5, 0.47, 2.37, 2.73, 3.4, 3.7, 3.5, 3.53, 1.73, 1.33, 0.87, 0.57, 0.7, 0.67, 0.63, 0.67, 0.47, 0.37, 0.23, 0.23, 0.6, 0.53, 0.53, 0.97, 1.2, 1.23, 0.8, 0.7, 0.7, 0.27, 0.03, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.03, 0.8, 0.97, 1.67, 2.27, 2.73, 4.53, 4.43, 4.43, 4.73, 9.66, 11.9, 13.52, 14.46, 18.25, 20.82, 20.22, 22.35, 24.54, 30.64, 35.62, 40.05, 43.62, 45.95, 47.59, 47.69, 44.21, 42.28, 44.71, 46.13, 45.25, 45.79, 49.55, 48.82, 42.62, 41.8, 41.45, 37.35, 35.18, 34.25, 39.41, 37.45, 35.52, 33.48, 28.72, 29.35, 25.71, 25.41, 29.14, 34.31, 45.44, 48.94, 50.78, 56.88, 60.31, 56.68, 45.45, 41.62, 39.19, 30.29, 21.7, 21.5, 20.33, 16.59, 11.49, 9.5, 7.6, 4.64, 4.27, 3.47, 2.94, 2.33, 1.6, 1.03, 0.37, 0.23, 0.23, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0];
+const ready = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 3, 14, 15, 15, 16, 16, 21, 21, 24, 30, 30, 87, 103, 123, 135, 135, 136, 139, 143, 149, 152, 156, 156, 158, 163, 163, 163, 163, 163, 176, 179, 179, 192, 199, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 201, 224, 229, 250, 268, 282, 337, 357, 362, 392, 558, 639, 743, 791, 910, 1017, 1165, 1310, 1480, 1711, 1980, 2220, 2475, 2690, 2909, 3143, 3307, 3489, 3817, 4075, 4269, 4519, 4796, 4956, 5098, 5331, 5513, 5640, 5852, 5984, 6281, 6455, 6579, 6645, 6714, 6865, 7053, 7218, 7454, 7675, 8078, 8334, 8577, 8925, 9264, 9376, 9442, 9589, 9759, 9840, 9921, 10027, 10058, 10087, 10104, 10126, 10150, 10167, 10187, 10192, 10193, 10196, 10198, 10198, 10198, 10199, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10000, 3500, 0];
+const pending = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 197, 186, 185, 185, 184, 184, 179, 179, 176, 170, 170, 113, 97, 77, 65, 65, 64, 61, 57, 51, 48, 44, 44, 42, 37, 37, 37, 37, 37, 24, 21, 21, 8, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 5000, 8000, 10000, 9999, 9976, 9971, 9950, 9932, 9918, 9863, 9843, 9838, 9808, 9642, 9561, 9457, 9409, 9290, 9183, 9035, 8890, 8720, 8489, 8220, 7980, 7725, 7510, 7291, 7057, 6893, 6711, 6383, 6125, 5931, 5681, 5404, 5244, 5102, 4869, 4687, 4560, 4348, 4216, 3919, 3745, 3621, 3555, 3486, 3335, 3147, 2982, 2746, 2525, 2122, 1866, 1623, 1275, 936, 824, 758, 611, 441, 360, 279, 173, 142, 113, 96, 74, 50, 33, 13, 8, 7, 4, 2, 2, 2, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+const total = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 5200, 8200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10000, 3500, 0];
+const rateData = ts.map((t, i) => ({x: t, y: rates[i]}));
+const readyData = ts.map((t, i) => ({x: t, y: ready[i]}));
+const pendingData = ts.map((t, i) => ({x: t, y: pending[i]}));
+const totalData = ts.map((t, i) => ({x: t, y: total[i]}));
+const rateColors = gaps.map(g => g ? 'rgba(255,165,0,0.6)' : '#e94560');
+const rateRadii = gaps.map(g => g ? 5 : 2);
+const rateYMax = 90.0;
+
+new Chart(document.getElementById('rateChart'), {
+  type: 'scatter',
+  data: {
+    datasets: [
+      { label: 'Ready Rate (pods/sec)', data: rateData, borderColor: '#e94560',
+        borderWidth: 2, pointBackgroundColor: rateColors, pointRadius: rateRadii,
+        showLine: true, fill: false, tension: 0.1 },
+
+    ]
+  },
+  options: {
+    responsive: true,
+    plugins: {
+      title: { display: true, text: 'Pod Ready Rate Over Time', color: '#eee' },
+      legend: { labels: { color: '#ccc' } },
+      tooltip: {
+        callbacks: {
+          afterLabel: function(ctx) {
+            if (gaps[ctx.dataIndex]) return '⚠ GAP: averaged over ' + (ts[ctx.dataIndex] - (ctx.dataIndex > 0 ? ts[ctx.dataIndex-1] : 0)).toFixed(0) + 's';
+            return '';
+          }
+        }
+      }
+    },
+    scales: {
+      x: { type: 'linear', title: { display: true, text: 'Seconds', color: '#aaa' },
+           ticks: { color: '#888', stepSize: 60 }, min: 0 },
+      y: { title: { display: true, text: 'Pods/sec', color: '#aaa' }, ticks: { color: '#888' },
+           min: 0, ...(rateYMax ? { max: rateYMax } : {}) }
+    }
+  }
+});
+
+new Chart(document.getElementById('countChart'), {
+  type: 'scatter',
+  data: {
+    datasets: [
+      { label: 'Ready', data: readyData, borderColor: '#4ecca3', borderWidth: 2,
+        pointRadius: 1, showLine: true, fill: true, backgroundColor: 'rgba(78,204,163,0.15)', tension: 0.1 },
+      { label: 'Pending', data: pendingData, borderColor: '#e94560', borderWidth: 2,
+        pointRadius: 1, showLine: true, fill: true, backgroundColor: 'rgba(233,69,96,0.15)', tension: 0.1 },
+      { label: 'Total', data: totalData, borderColor: '#888', borderWidth: 1,
+        pointRadius: 0, showLine: true, borderDash: [3,3], fill: false },
+    ]
+  },
+  options: {
+    responsive: true,
+    plugins: {
+      title: { display: true, text: 'Pod Counts Over Time', color: '#eee' },
+      legend: { labels: { color: '#ccc' } }
+    },
+    scales: {
+      x: { type: 'linear', title: { display: true, text: 'Seconds', color: '#aaa' },
+           ticks: { color: '#888', stepSize: 60 }, min: 0 },
+      y: { title: { display: true, text: 'Pods', color: '#aaa' }, ticks: { color: '#888' }, min: 0 }
+    }
+  }
+});
+</script>
+<div class="chart-box">
+<table>
+<tr><th style="text-align:left">Error</th><th>Count</th><th>Object</th><th style="text-align:left">Sample Message</th></tr>
+<tr><td style='color:#e94560'>Failed</td><td>8,844</td><td>Pod</td><td style='color:#999;font-size:12px'>Failed to pull image "networkstatic/iperf3:latest": pull QPS exceeded</td></tr>
+<tr><td style='color:#e94560'>FailedCreatePodSandBox</td><td>899</td><td>Pod</td><td style='color:#999;font-size:12px'>Failed to create pod sandbox: rpc error: code = Unknown desc = failed to setup network for sandbox "9a29768d6ebf4b4308914dd95b452b5e49e7f8c8b3014666c0</td></tr>
+<tr><td style='color:#e94560'>FailedCreatePodContainer</td><td>27</td><td>Pod</td><td style='color:#999;font-size:12px'>unable to ensure pod container exists: failed to create container for [kubepods burstable podcad32bee-485d-41d4-94d6-10a8223a8f19] : unable to start u</td></tr>
+
+</table>
+<div class='note'>14,333 FailedScheduling events filtered (expected during node provisioning)</div>
+</div>
+
+</body></html>

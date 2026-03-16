@@ -1,0 +1,149 @@
+{
+  "finding_id": "finding-9d069de3",
+  "timestamp": "2026-03-16T21:02:14.570134+00:00",
+  "severity": "warning",
+  "symptom": "Ready rate 0.20/s dropped below threshold (rolling avg 3.53/s)",
+  "affected_resources": [
+    "ip-100-64-155-110.us-west-2.compute.internal",
+    "ip-192-168-250-109.us-west-2.compute.internal",
+    "ip-100-64-39-235.us-west-2.compute.internal",
+    "alt-chg55",
+    "ip-100-64-252-160.us-west-2.compute.internal",
+    "ip-100-64-38-51.us-west-2.compute.internal",
+    "ip-100-64-247-248.us-west-2.compute.internal",
+    "alt-tg2dx",
+    "ip-100-64-246-189.us-west-2.compute.internal",
+    "alt-tz6rs"
+  ],
+  "k8s_events": [
+    {
+      "timestamp": "2026-03-16T20:59:57+00:00",
+      "namespace": "default",
+      "involved_object_kind": "NodeClaim",
+      "involved_object_name": "alt-chg55",
+      "reason": "InsufficientCapacityError",
+      "message": "NodeClaim alt-chg55 event: creating instance, insufficient capacity, with fleet error(s), UnfulfillableCapacity: Unable to fulfill capacity due to your request configuration. Please adjust your request and try again. (aws-error-code=UnfulfillableCapacity, aws-operation-name=CreateFleet, aws-request-id=874cf5ed-e3f7-4304-873e-...",
+      "event_type": "Warning",
+      "scaling_step": 0,
+      "count": 1
+    },
+    {
+      "timestamp": "2026-03-16T20:59:58+00:00",
+      "namespace": "default",
+      "involved_object_kind": "NodeClaim",
+      "involved_object_name": "alt-chg55",
+      "reason": "TerminationGracePeriodExpiring",
+      "message": "All pods will be deleted by 2026-03-16T21:00:07Z",
+      "event_type": "Warning",
+      "scaling_step": 0,
+      "count": 1
+    },
+    {
+      "timestamp": "2026-03-16T20:59:57+00:00",
+      "namespace": "default",
+      "involved_object_kind": "NodeClaim",
+      "involved_object_name": "alt-tg2dx",
+      "reason": "InsufficientCapacityError",
+      "message": "NodeClaim alt-tg2dx event: creating instance, insufficient capacity, with fleet error(s), UnfulfillableCapacity: Unable to fulfill capacity due to your request configuration. Please adjust your request and try again. (aws-error-code=UnfulfillableCapacity, aws-operation-name=CreateFleet, aws-request-id=874cf5ed-e3f7-4304-873e-...",
+      "event_type": "Warning",
+      "scaling_step": 0,
+      "count": 1
+    },
+    {
+      "timestamp": "2026-03-16T20:59:58+00:00",
+      "namespace": "default",
+      "involved_object_kind": "NodeClaim",
+      "involved_object_name": "alt-tg2dx",
+      "reason": "TerminationGracePeriodExpiring",
+      "message": "All pods will be deleted by 2026-03-16T21:00:07Z",
+      "event_type": "Warning",
+      "scaling_step": 0,
+      "count": 1
+    },
+    {
+      "timestamp": "2026-03-16T20:59:57+00:00",
+      "namespace": "default",
+      "involved_object_kind": "NodeClaim",
+      "involved_object_name": "alt-tz6rs",
+      "reason": "InsufficientCapacityError",
+      "message": "NodeClaim alt-tz6rs event: creating instance, insufficient capacity, with fleet error(s), UnfulfillableCapacity: Unable to fulfill capacity due to your request configuration. Please adjust your request and try again. (aws-error-code=UnfulfillableCapacity, aws-operation-name=CreateFleet, aws-request-id=874cf5ed-e3f7-4304-873e-...",
+      "event_type": "Warning",
+      "scaling_step": 0,
+      "count": 1
+    },
+    {
+      "timestamp": "2026-03-16T20:59:58+00:00",
+      "namespace": "default",
+      "involved_object_kind": "NodeClaim",
+      "involved_object_name": "alt-tz6rs",
+      "reason": "TerminationGracePeriodExpiring",
+      "message": "All pods will be deleted by 2026-03-16T21:00:07Z",
+      "event_type": "Warning",
+      "scaling_step": 0,
+      "count": 1
+    },
+    {
+      "timestamp": "2026-03-16T21:00:29+00:00",
+      "namespace": "default",
+      "involved_object_kind": "Node",
+      "involved_object_name": "ip-100-64-155-110.us-west-2.compute.internal",
+      "reason": "InvalidDiskCapacity",
+      "message": "invalid capacity 0 on image filesystem",
+      "event_type": "Warning",
+      "scaling_step": 0,
+      "count": 1
+    },
+    {
+      "timestamp": "2026-03-16T21:00:46+00:00",
+      "namespace": "default",
+      "involved_object_kind": "Node",
+      "involved_object_name": "ip-100-64-246-189.us-west-2.compute.internal",
+      "reason": "InvalidDiskCapacity",
+      "message": "invalid capacity 0 on image filesystem",
+      "event_type": "Warning",
+      "scaling_step": 0,
+      "count": 1
+    },
+    {
+      "timestamp": "2026-03-16T21:00:32+00:00",
+      "namespace": "default",
+      "involved_object_kind": "Node",
+      "involved_object_name": "ip-100-64-247-248.us-west-2.compute.internal",
+      "reason": "InvalidDiskCapacity",
+      "message": "invalid capacity 0 on image filesystem",
+      "event_type": "Warning",
+      "scaling_step": 0,
+      "count": 1
+    },
+    {
+      "timestamp": "2026-03-16T21:00:46+00:00",
+      "namespace": "default",
+      "involved_object_kind": "Node",
+      "involved_object_name": "ip-100-64-252-160.us-west-2.compute.internal",
+      "reason": "InvalidDiskCapacity",
+      "message": "invalid capacity 0 on image filesystem",
+      "event_type": "Warning",
+      "scaling_step": 0,
+      "count": 1
+    },
+    {
+      "timestamp": "2026-03-16T21:00:25+00:00",
+      "namespace": "default",
+      "involved_object_kind": "Node",
+      "involved_object_name": "ip-100-64-38-51.us-west-2.compute.internal",
+      "reason": "InvalidDiskCapacity",
+      "message": "invalid capacity 0 on image filesystem",
+      "event_type": "Warning",
+      "scaling_step": 0,
+      "count": 1
+    }
+  ],
+  "node_metrics": [],
+  "node_diagnostics": [],
+  "evidence_references": [
+    "pods:pending=0,creating=0",
+    "warnings:InvalidDiskCapacity=7,InsufficientCapacityError=3,TerminationGracePeriodExpiring=3"
+  ],
+  "root_cause": "InsufficientCapacityError x3 \u2014 Karpenter cannot provision nodes (spot exhaustion or NodePool limit reached); TerminationGracePeriodExpiring x3 \u2014 failed nodeclaim cleanup",
+  "resolved": true
+}

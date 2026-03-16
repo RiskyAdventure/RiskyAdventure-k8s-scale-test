@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8">
+<title>Scale Test — 2026-03-16_23-38-51</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+<style>
+body { font-family: -apple-system, sans-serif; margin: 20px; background: #1a1a2e; color: #eee; }
+.chart-box { background: #16213e; border-radius: 8px; padding: 20px; margin-bottom: 20px; }
+h1 { color: #e94560; margin-bottom: 4px; }
+.run-id { color: #888; font-size: 13px; margin-bottom: 16px; }
+.stats { display: flex; gap: 16px; margin-bottom: 20px; flex-wrap: wrap; }
+.stat { background: #0f3460; padding: 12px 20px; border-radius: 8px; }
+.stat .val { font-size: 24px; font-weight: bold; color: #e94560; }
+.stat .lbl { font-size: 11px; color: #aaa; }
+table { border-collapse: collapse; width: 100%; margin-bottom: 20px; }
+th, td { padding: 8px 14px; text-align: right; border-bottom: 1px solid #2a2a4a; }
+th { color: #aaa; font-size: 12px; text-transform: uppercase; }
+td { color: #ddd; font-size: 14px; }
+td:first-child, th:first-child { text-align: left; }
+.result { font-size: 18px; font-weight: bold; padding: 4px 12px; border-radius: 4px; display: inline-block; margin-bottom: 12px; }
+.result.pass { background: #1b4332; color: #4ecca3; }
+.result.fail { background: #4a1525; color: #e94560; }
+.note { color: #666; font-size: 11px; margin-top: 4px; }
+.data-table { max-height: 400px; overflow-y: auto; }
+.data-table table { font-size: 12px; }
+.data-table td, .data-table th { padding: 4px 10px; white-space: nowrap; }
+</style></head><body>
+<h1>Scale Test Results</h1>
+<div class="run-id">2026-03-16_23-38-51</div>
+<div class="result pass">PASSED — success</div>
+
+<div class="chart-box">
+<table>
+<tr><th style="text-align:left">Metric</th><th>Value</th></tr>
+<tr><td style="color:#aaa">Target</td><td>10,000 pods</td></tr>
+<tr><td style="color:#aaa">Reached</td><td>10,200 pods</td></tr>
+<tr><td style="color:#aaa">Scaling Duration</td><td>0.0m (0s)</td></tr>
+<tr><td style="color:#aaa">Avg Rate</td><td>0.0 pods/s</td></tr>
+<tr><td style="color:#aaa">Peak Rate (clean)</td><td>2039.5 pods/s</td></tr>
+<tr><td style="color:#aaa">Nodes</td><td>163</td></tr>
+<tr><td style="color:#aaa">Anomalies</td><td>0</td></tr>
+<tr><td style="color:#aaa">Data Points</td><td>5 (0 gaps)</td></tr>
+</table>
+</div>
+
+
+
+
+
+<div class="chart-box data-table">
+<table>
+<tr><th>Elapsed</th><th>Time</th><th>Ready</th><th>Pending</th><th>Total</th><th>Rate/s</th><th>Interval</th><th>Gap</th></tr>
+<tr><td>0s</td><td>23:38:59</td><td>0</td><td>0</td><td>0</td><td>0.0</td><td>0.0s</td><td></td></tr>
+<tr><td>5s</td><td>23:39:04</td><td>10,200</td><td>0</td><td>10,200</td><td>2039.5</td><td>5.0s</td><td></td></tr>
+<tr><td>171s</td><td>23:41:50</td><td>10,000</td><td>0</td><td>10,000</td><td>-19.5</td><td>10.2s</td><td></td></tr>
+<tr><td>182s</td><td>23:42:00</td><td>3,000</td><td>0</td><td>3,000</td><td>-680.3</td><td>10.3s</td><td></td></tr>
+<tr><td>192s</td><td>23:42:10</td><td>0</td><td>0</td><td>0</td><td>-292.3</td><td>10.3s</td><td></td></tr>
+
+</table>
+</div>
+
+<div class="chart-box">
+<canvas id="rateChart" height="100"></canvas>
+<div class="note">Y axis capped at p95 × 1.5 to avoid spike distortion</div>
+</div>
+<div class="chart-box">
+<canvas id="countChart" height="100"></canvas>
+</div>
+
+<script>
+const ts = [0.0, 5.0, 171.2, 181.5, 191.8];
+const gaps = [false, false, false, false, false];
+const rates = [0.0, 2039.47, -19.53, -680.31, -292.34];
+const rolling = [0.0, 1019.73, 0.0, 0.0, 0.0];
+const ready = [0, 10200, 10000, 3000, 0];
+const pending = [0, 0, 0, 0, 0];
+const total = [0, 10200, 10000, 3000, 0];
+const rateData = ts.map((t, i) => ({x: t, y: rates[i]}));
+const readyData = ts.map((t, i) => ({x: t, y: ready[i]}));
+const pendingData = ts.map((t, i) => ({x: t, y: pending[i]}));
+const totalData = ts.map((t, i) => ({x: t, y: total[i]}));
+const rateColors = gaps.map(g => g ? 'rgba(255,165,0,0.6)' : '#e94560');
+const rateRadii = gaps.map(g => g ? 5 : 2);
+const rateYMax = 3060.0;
+
+new Chart(document.getElementById('rateChart'), {
+  type: 'scatter',
+  data: {
+    datasets: [
+      { label: 'Ready Rate (pods/sec)', data: rateData, borderColor: '#e94560',
+        borderWidth: 2, pointBackgroundColor: rateColors, pointRadius: rateRadii,
+        showLine: true, fill: false, tension: 0.1 },
+
+    ]
+  },
+  options: {
+    responsive: true,
+    plugins: {
+      title: { display: true, text: 'Pod Ready Rate Over Time', color: '#eee' },
+      legend: { labels: { color: '#ccc' } },
+      tooltip: {
+        callbacks: {
+          afterLabel: function(ctx) {
+            if (gaps[ctx.dataIndex]) return '⚠ GAP: averaged over ' + (ts[ctx.dataIndex] - (ctx.dataIndex > 0 ? ts[ctx.dataIndex-1] : 0)).toFixed(0) + 's';
+            return '';
+          }
+        }
+      }
+    },
+    scales: {
+      x: { type: 'linear', title: { display: true, text: 'Seconds', color: '#aaa' },
+           ticks: { color: '#888', stepSize: 60 }, min: 0 },
+      y: { title: { display: true, text: 'Pods/sec', color: '#aaa' }, ticks: { color: '#888' },
+           min: 0, ...(rateYMax ? { max: rateYMax } : {}) }
+    }
+  }
+});
+
+new Chart(document.getElementById('countChart'), {
+  type: 'scatter',
+  data: {
+    datasets: [
+      { label: 'Ready', data: readyData, borderColor: '#4ecca3', borderWidth: 2,
+        pointRadius: 1, showLine: true, fill: true, backgroundColor: 'rgba(78,204,163,0.15)', tension: 0.1 },
+      { label: 'Pending', data: pendingData, borderColor: '#e94560', borderWidth: 2,
+        pointRadius: 1, showLine: true, fill: true, backgroundColor: 'rgba(233,69,96,0.15)', tension: 0.1 },
+      { label: 'Total', data: totalData, borderColor: '#888', borderWidth: 1,
+        pointRadius: 0, showLine: true, borderDash: [3,3], fill: false },
+    ]
+  },
+  options: {
+    responsive: true,
+    plugins: {
+      title: { display: true, text: 'Pod Counts Over Time', color: '#eee' },
+      legend: { labels: { color: '#ccc' } }
+    },
+    scales: {
+      x: { type: 'linear', title: { display: true, text: 'Seconds', color: '#aaa' },
+           ticks: { color: '#888', stepSize: 60 }, min: 0 },
+      y: { title: { display: true, text: 'Pods', color: '#aaa' }, ticks: { color: '#888' }, min: 0 }
+    }
+  }
+});
+</script>
+
+
+</body></html>

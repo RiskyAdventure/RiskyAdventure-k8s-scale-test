@@ -16,6 +16,7 @@ from k8s_scale_test.models import (
     PodsPerNodeBreakdown,
     PodSizingRecommendation,
     PreflightReport,
+    StressorSizing,
     SubnetIPInfo,
     TestConfig,
 )
@@ -504,6 +505,85 @@ class PreflightChecker:
             log.warning("EC2NodeClass query failed: %s", exc)
             return []
 
+    def _compute_stressor_sizing(
+        self,
+        pod_sizing: PodSizingRecommendation,
+        daemonset_count: int,
+        effective_max_pods: int,
+        instance_type: str,
+        cpu_limit_multiplier: float = 2.0,
+        memory_limit_multiplier: float = 1.5,
+    ) -> StressorSizing:
+        """Compute per-pod resource requests for stressor deployments.
+
+        Divides allocatable resources evenly across the pod ceiling
+        (effective_max_pods - daemonset_count) so each stressor type
+        packs to the node's pod limit.
+        """
+        pod_ceiling = max(effective_max_pods - daemonset_count, 1)
+        cpu_req = max(pod_sizing.allocatable_cpu_millicores // pod_ceiling, 1)
+        mem_req = max(pod_sizing.allocatable_memory_mi // pod_ceiling, 1)
+        return StressorSizing(
+            cpu_request_millicores=cpu_req,
+            memory_request_mi=mem_req,
+            pod_ceiling=pod_ceiling,
+            instance_type=instance_type,
+            allocatable_cpu_millicores=pod_sizing.allocatable_cpu_millicores,
+            allocatable_memory_mi=pod_sizing.allocatable_memory_mi,
+            daemonset_count=daemonset_count,
+            cpu_limit_multiplier=cpu_limit_multiplier,
+            memory_limit_multiplier=memory_limit_multiplier,
+        )
+    async def _get_node_allocatable(self, instance_type: str) -> tuple[int, int] | None:
+        """Query actual allocatable CPU/memory from a live node of the given instance type.
+
+        Returns (cpu_millicores, memory_mi) or None if no matching node is found.
+        This is more accurate than computing from NodeClass CRD reservations because
+        kubelet reservations may be set via user data / launch template rather than
+        the NodeClass spec.
+        """
+        log = logging.getLogger(__name__)
+        if not self.k8s_client:
+            return None
+        try:
+            v1 = self.k8s_client.CoreV1Api()
+            nodes = v1.list_node(
+                label_selector=f"node.kubernetes.io/instance-type={instance_type}",
+                limit=1,
+                watch=False,
+            )
+            if not nodes.items:
+                return None
+            node = nodes.items[0]
+            alloc = node.status.allocatable or {}
+
+            # Parse CPU
+            cpu_str = alloc.get("cpu", "0")
+            if cpu_str.endswith("m"):
+                cpu_m = int(cpu_str[:-1])
+            else:
+                cpu_m = int(cpu_str) * 1000
+
+            # Parse memory (may be Ki, Mi, Gi, or raw bytes)
+            mem_str = str(alloc.get("memory", "0"))
+            if mem_str.endswith("Ki"):
+                mem_mi = int(mem_str[:-2]) // 1024
+            elif mem_str.endswith("Mi"):
+                mem_mi = int(mem_str[:-2])
+            elif mem_str.endswith("Gi"):
+                mem_mi = int(float(mem_str[:-2]) * 1024)
+            else:
+                mem_mi = int(mem_str) // (1024 * 1024)
+
+            log.info("  Live node allocatable for %s: cpu=%dm, memory=%dMi (from %s)",
+                     instance_type, cpu_m, mem_mi, node.metadata.name)
+            return cpu_m, mem_mi
+        except Exception as exc:
+            log.debug("Could not query live node allocatable for %s: %s", instance_type, exc)
+            return None
+
+
+
     # ------------------------------------------------------------------
     # Main entry point
     # ------------------------------------------------------------------
@@ -530,6 +610,77 @@ class PreflightChecker:
         # Count DaemonSets (they consume pod slots on every node)
         daemonset_count = await self._count_daemonsets()
 
+        # Compute stressor sizing from live cluster data
+        stressor_sizing = None
+        pod_sizing_recs = []
+        pods_per_node_bds = []
+        if pools and node_classes:
+            # First, try to get live node allocatable from any instance type in the target pool.
+            # This is more accurate than CRD-computed values because kubelet reservations
+            # may be set via NodeConfig/user data rather than the EC2NodeClass spec.
+            live_allocatable = None
+            live_instance_type = None
+            for pool in pools:
+                if live_allocatable:
+                    break
+                # Warn if pool has mixed-size instance types — single sizing can't be optimal for all
+                core_counts = {INSTANCE_TYPE_CORES.get(t, 0) for t in pool.instance_types if INSTANCE_TYPE_CORES.get(t, 0) > 0}
+                if len(core_counts) > 1:
+                    log.warning("  Pool %s has mixed-size instance types (%s) — sizing will target the first available",
+                                pool.name, ", ".join(pool.instance_types))
+                for itype in pool.instance_types:
+                    live = await self._get_node_allocatable(itype)
+                    if live:
+                        live_allocatable = live
+                        live_instance_type = itype
+                        break
+
+            for pool in pools:
+                nc = nc_by_name.get(pool.node_class_name)
+                if not nc:
+                    continue
+                for itype in pool.instance_types:
+                    cores = INSTANCE_TYPE_CORES.get(itype, 0)
+                    if cores <= 0:
+                        continue
+                    bd = self._calculate_pods_per_node(itype, nc, pool.name, cores)
+                    pods_per_node_bds.append(bd)
+                    ps = self._calculate_optimal_pod_sizing(itype, nc, bd.effective_max_pods, cores)
+
+                    # Override with live node allocatable if available and same core count
+                    # (nodes in the same pool share the same NodeConfig/kubelet reservations)
+                    if live_allocatable and stressor_sizing is None:
+                        live_cpu, live_mem = live_allocatable
+                        live_cores = INSTANCE_TYPE_CORES.get(live_instance_type, 0)
+                        if live_cores == cores and (live_cpu != ps.allocatable_cpu_millicores or live_mem != ps.allocatable_memory_mi):
+                            log.info("  Overriding CRD allocatable (%dm/%dMi) with live node (%dm/%dMi) from %s",
+                                     ps.allocatable_cpu_millicores, ps.allocatable_memory_mi,
+                                     live_cpu, live_mem, live_instance_type)
+                            ps = PodSizingRecommendation(
+                                instance_type=ps.instance_type,
+                                allocatable_cpu_millicores=live_cpu,
+                                allocatable_memory_mi=live_mem,
+                                recommended_cpu_request=ps.recommended_cpu_request,
+                                recommended_memory_request=ps.recommended_memory_request,
+                                max_pods_by_cpu=live_cpu // max(live_cpu // bd.effective_max_pods, 1) if bd.effective_max_pods > 0 else 0,
+                                max_pods_by_memory=live_mem // max(live_mem // bd.effective_max_pods, 1) if bd.effective_max_pods > 0 else 0,
+                                effective_density_limit=ps.effective_density_limit,
+                            )
+
+                    pod_sizing_recs.append(ps)
+                    if stressor_sizing is None:
+                        stressor_sizing = self._compute_stressor_sizing(
+                            ps, daemonset_count, bd.effective_max_pods, itype,
+                            cpu_limit_multiplier=self.config.cpu_limit_multiplier,
+                            memory_limit_multiplier=self.config.memory_limit_multiplier,
+                        )
+            if stressor_sizing:
+                log.info("  Stressor sizing: %dm CPU, %dMi memory per pod (pod_ceiling=%d, instance=%s)",
+                         stressor_sizing.cpu_request_millicores, stressor_sizing.memory_request_mi,
+                         stressor_sizing.pod_ceiling, stressor_sizing.instance_type)
+        else:
+            log.warning("Cannot compute stressor sizing: no NodeClass/NodePool data. Using manifest defaults.")
+
         # Calculate workload demand
         from k8s_scale_test.flux import FluxRepoReader
         reader = FluxRepoReader(self.config.flux_repo_path)
@@ -539,24 +690,33 @@ class PreflightChecker:
         if self.config.exclude_apps:
             deployments = [d for d in deployments if d.name not in set(self.config.exclude_apps)]
 
-        n_deploys = len(deployments) or 1
-        per_deploy = self.config.target_pods // n_deploys
-        remainder = self.config.target_pods % n_deploys
-        total_cpu_m = 0
-        total_mem_mi = 0
-        workload_summary = []
-        for i, d in enumerate(deployments):
-            replicas = per_deploy + (1 if i < remainder else 0)
-            cpu_m = parse_cpu_millicores(d.resource_requests.get("cpu", "0"))
-            mem_mi = parse_memory_mi(d.resource_requests.get("memory", "0"))
-            total_cpu_m += cpu_m * replicas
-            total_mem_mi += mem_mi * replicas
-            workload_summary.append(f"{d.name}:{replicas}x({cpu_m}m,{mem_mi}Mi)")
+        # Calculate workload demand — use dynamic sizing if available
+        if stressor_sizing:
+            # Use computed sizing for all pods (all stressors get same per-pod resources)
+            total_cpu_m = stressor_sizing.cpu_request_millicores * self.config.target_pods
+            total_mem_mi = stressor_sizing.memory_request_mi * self.config.target_pods
+            log.info("  Workload demand (dynamic sizing): %.1f vCPU, %.1f GiB memory, %d pods",
+                     total_cpu_m / 1000, total_mem_mi / 1024, self.config.target_pods)
+        else:
+            # Fallback: use manifest resource requests (original behavior)
+            n_deploys = len(deployments) or 1
+            per_deploy = self.config.target_pods // n_deploys
+            remainder = self.config.target_pods % n_deploys
+            total_cpu_m = 0
+            total_mem_mi = 0
+            workload_summary = []
+            for i, d in enumerate(deployments):
+                replicas = per_deploy + (1 if i < remainder else 0)
+                cpu_m = parse_cpu_millicores(d.resource_requests.get("cpu", "0"))
+                mem_mi = parse_memory_mi(d.resource_requests.get("memory", "0"))
+                total_cpu_m += cpu_m * replicas
+                total_mem_mi += mem_mi * replicas
+                workload_summary.append(f"{d.name}:{replicas}x({cpu_m}m,{mem_mi}Mi)")
+            log.info("  Workloads: %s", ", ".join(workload_summary))
+            log.info("  Total demand: %.1f vCPU, %.1f GiB memory, %d pods",
+                     total_cpu_m / 1000, total_mem_mi / 1024, self.config.target_pods)
 
         total_cpu_cores = total_cpu_m / 1000
-        log.info("  Workloads: %s", ", ".join(workload_summary))
-        log.info("  Total demand: %.1f vCPU, %.1f GiB memory, %d pods",
-                 total_cpu_cores, total_mem_mi / 1024, self.config.target_pods)
 
         constraints_checked = []
         blocking = []
@@ -678,10 +838,11 @@ class PreflightChecker:
                 vcpus_per_instance={}, max_nodes_per_type={},
                 max_pods_per_type={}, total_max_pods=0,
             ) for p in pools],
-            pods_per_node_breakdowns=[],
-            pod_sizing_recommendations=[],
+            pods_per_node_breakdowns=pods_per_node_bds,
+            pod_sizing_recommendations=pod_sizing_recs,
             max_achievable_pods=max_achievable,
             decision=decision,
+            stressor_sizing=stressor_sizing,
         )
 
         log.info("Preflight: max_achievable=%d, target=%d, decision=%s",

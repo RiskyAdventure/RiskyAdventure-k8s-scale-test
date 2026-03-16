@@ -1,0 +1,45 @@
+{
+  "node_name": "ip-192-168-188-7.us-west-2.compute.internal",
+  "instance_id": "i-00ce3083e0b89314e",
+  "collection_timestamp": "2026-03-16T22:20:54.912337+00:00",
+  "kubelet_logs": {
+    "instance_id": "i-00ce3083e0b89314e",
+    "command": "journalctl -u kubelet --no-pager -n 500",
+    "command_id": "",
+    "status": "Failed",
+    "output": "",
+    "error": "send_command failed"
+  },
+  "containerd_logs": {
+    "instance_id": "i-00ce3083e0b89314e",
+    "command": "journalctl -u containerd --no-pager -n 500",
+    "command_id": "",
+    "status": "Failed",
+    "output": "",
+    "error": "send_command failed"
+  },
+  "journal_kubelet": {
+    "instance_id": "i-00ce3083e0b89314e",
+    "command": "journalctl -u kubelet --no-pager --since '10 minutes ago'",
+    "command_id": "",
+    "status": "Failed",
+    "output": "",
+    "error": "send_command failed"
+  },
+  "journal_containerd": {
+    "instance_id": "i-00ce3083e0b89314e",
+    "command": "journalctl -u containerd --no-pager --since '10 minutes ago'",
+    "command_id": "",
+    "status": "Failed",
+    "output": "",
+    "error": "send_command failed"
+  },
+  "resource_utilization": {
+    "instance_id": "i-00ce3083e0b89314e",
+    "command": "top -bn1 | head -20; echo '---'; df -h; echo '---'; free -h",
+    "command_id": "",
+    "status": "Failed",
+    "output": "",
+    "error": "send_command failed"
+  }
+}
