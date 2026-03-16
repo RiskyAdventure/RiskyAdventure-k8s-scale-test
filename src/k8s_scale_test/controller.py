@@ -939,19 +939,28 @@ class ScaleTestController:
         lock = threading.Lock()
 
         def _watch_resource(list_func, resource_key):
-            """Informer pattern: LIST then WATCH from resource_version."""
+            """Informer pattern: chunked LIST then WATCH from resource_version."""
             from kubernetes import watch as kw
 
             while not stop_event.is_set():
                 try:
-                    # LIST to get initial state
-                    resp = list_func(watch=False)
+                    # Chunked LIST to get initial state without huge responses
                     initial_count = 0
-                    for item in resp.items:
-                        ns = item.metadata.namespace or item.metadata.name
-                        if ns.startswith("cl2-test-"):
-                            initial_count += 1
-                    rv = resp.metadata.resource_version
+                    rv = None
+                    _continue = None
+                    while True:
+                        kwargs = {"watch": False, "limit": 500}
+                        if _continue:
+                            kwargs["_continue"] = _continue
+                        resp = list_func(**kwargs)
+                        for item in resp.items:
+                            ns = item.metadata.namespace or item.metadata.name
+                            if ns.startswith("cl2-test-"):
+                                initial_count += 1
+                        rv = resp.metadata.resource_version
+                        _continue = resp.metadata._continue if resp.metadata else None
+                        if not _continue:
+                            break
 
                     with lock:
                         current[resource_key] = initial_count
@@ -974,12 +983,11 @@ class ScaleTestController:
                             elif etype == "DELETED":
                                 current[resource_key] = max(0, current[resource_key] - 1)
                             elif etype == "MODIFIED":
-                                pass  # count doesn't change
+                                pass
                             peak[resource_key] = max(peak[resource_key], current[resource_key])
                 except Exception as exc:
                     if stop_event.is_set():
                         return
-                    # 410 Gone = resource_version expired, re-list
                     import time
                     time.sleep(1)
 
