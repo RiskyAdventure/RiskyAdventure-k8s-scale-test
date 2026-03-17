@@ -33,3 +33,8 @@ flux2/apps/base/ack-clusters/
 
 # Scale test results — ephemeral run data, not source code
 scale-test-results/
+**/scale-test-results/
+
+# Scale test log files
+scale-test-*.log
+**/scale-test-*.log
