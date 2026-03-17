@@ -495,7 +495,7 @@ class ScaleTestController:
             elapsed = (datetime.now(timezone.utc) - start).total_seconds()
             elapsed_min = elapsed / 60
 
-            # Track peak rate from the monitor (source of truth)
+            # Track peak rate from the monitor
             if self._monitor:
                 current_rate = self._monitor.get_current_rate()
                 if current_rate > peak_rate:

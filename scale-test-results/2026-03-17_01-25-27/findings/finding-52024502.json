@@ -1,0 +1,97 @@
+{
+  "finding_id": "finding-52024502",
+  "timestamp": "2026-03-17T01:32:29.330856+00:00",
+  "severity": "warning",
+  "symptom": "Ready rate 0.00/s dropped below threshold (rolling avg 1.53/s)",
+  "affected_resources": [
+    "ip-100-64-33-139.us-west-2.compute.internal",
+    "ip-192-168-74-77.us-west-2.compute.internal",
+    "ip-192-168-110-199.us-west-2.compute.internal",
+    "alt-tdnhh",
+    "alt-fq5s4",
+    "alt-p72fz",
+    "ip-100-64-55-125.us-west-2.compute.internal",
+    "alt-vnjwh",
+    "ip-192-168-122-222.us-west-2.compute.internal",
+    "ip-192-168-84-98.us-west-2.compute.internal",
+    "alt-lnxk8",
+    "alt-5f6gg",
+    "alt-7jc25"
+  ],
+  "k8s_events": [
+    {
+      "timestamp": "2026-03-17T01:25:29+00:00",
+      "namespace": "default",
+      "involved_object_kind": "NodeClaim",
+      "involved_object_name": "alt-5f6gg",
+      "reason": "TerminationGracePeriodExpiring",
+      "message": "All pods will be deleted by 2026-03-17T01:25:39Z",
+      "event_type": "Warning",
+      "scaling_step": 0,
+      "count": 1
+    },
+    {
+      "timestamp": "2026-03-17T01:25:40+00:00",
+      "namespace": "default",
+      "involved_object_kind": "NodeClaim",
+      "involved_object_name": "alt-7jc25",
+      "reason": "TerminationGracePeriodExpiring",
+      "message": "All pods will be deleted by 2026-03-17T01:25:50Z",
+      "event_type": "Warning",
+      "scaling_step": 0,
+      "count": 1
+    },
+    {
+      "timestamp": "2026-03-17T01:25:28+00:00",
+      "namespace": "default",
+      "involved_object_kind": "NodeClaim",
+      "involved_object_name": "alt-fq5s4",
+      "reason": "TerminationGracePeriodExpiring",
+      "message": "All pods will be deleted by 2026-03-17T01:25:38Z",
+      "event_type": "Warning",
+      "scaling_step": 0,
+      "count": 1
+    },
+    {
+      "timestamp": "2026-03-17T01:25:14+00:00",
+      "namespace": "default",
+      "involved_object_kind": "NodeClaim",
+      "involved_object_name": "alt-lnxk8",
+      "reason": "TerminationGracePeriodExpiring",
+      "message": "All pods will be deleted by 2026-03-17T01:25:24Z",
+      "event_type": "Warning",
+      "scaling_step": 0,
+      "count": 1
+    },
+    {
+      "timestamp": "2026-03-17T01:25:52+00:00",
+      "namespace": "default",
+      "involved_object_kind": "NodeClaim",
+      "involved_object_name": "alt-p72fz",
+      "reason": "TerminationGracePeriodExpiring",
+      "message": "All pods will be deleted by 2026-03-17T01:26:02Z",
+      "event_type": "Warning",
+      "scaling_step": 0,
+      "count": 1
+    },
+    {
+      "timestamp": "2026-03-17T01:25:40+00:00",
+      "namespace": "default",
+      "involved_object_kind": "Node",
+      "involved_object_name": "ip-192-168-84-98.us-west-2.compute.internal",
+      "reason": "FailedDraining",
+      "message": "Failed to drain node, 1 pods are waiting to be evicted",
+      "event_type": "Warning",
+      "scaling_step": 0,
+      "count": 1
+    }
+  ],
+  "node_metrics": [],
+  "node_diagnostics": [],
+  "evidence_references": [
+    "pods:pending=0,creating=0",
+    "warnings:TerminationGracePeriodExpiring=13,FailedDraining=1"
+  ],
+  "root_cause": "FailedDraining x1 \u2014 nodes being replaced mid-scale",
+  "resolved": true
+}

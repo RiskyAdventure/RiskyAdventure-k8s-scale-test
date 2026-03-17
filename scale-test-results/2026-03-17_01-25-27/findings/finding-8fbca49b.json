@@ -1,0 +1,136 @@
+{
+  "finding_id": "finding-8fbca49b",
+  "timestamp": "2026-03-17T01:41:42.531506+00:00",
+  "severity": "warning",
+  "symptom": "Timeout: 66 pods pending after 776s",
+  "affected_resources": [
+    "ip-192-168-82-200.us-west-2.compute.internal",
+    "alt-542g5",
+    "ip-100-64-44-73.us-west-2.compute.internal",
+    "alt-n9kwz",
+    "ip-100-64-49-145.us-west-2.compute.internal",
+    "alt-q4rsv",
+    "ip-100-64-36-150.us-west-2.compute.internal",
+    "alt-5jv2v"
+  ],
+  "k8s_events": [
+    {
+      "timestamp": "2026-03-17T01:38:14+00:00",
+      "namespace": "default",
+      "involved_object_kind": "NodeClaim",
+      "involved_object_name": "alt-542g5",
+      "reason": "TerminationGracePeriodExpiring",
+      "message": "All pods will be deleted by 2026-03-17T01:38:24Z",
+      "event_type": "Warning",
+      "scaling_step": 0,
+      "count": 1
+    },
+    {
+      "timestamp": "2026-03-17T01:38:14+00:00",
+      "namespace": "default",
+      "involved_object_kind": "NodeClaim",
+      "involved_object_name": "alt-5jv2v",
+      "reason": "TerminationGracePeriodExpiring",
+      "message": "All pods will be deleted by 2026-03-17T01:38:24Z",
+      "event_type": "Warning",
+      "scaling_step": 0,
+      "count": 1
+    },
+    {
+      "timestamp": "2026-03-17T01:38:14+00:00",
+      "namespace": "default",
+      "involved_object_kind": "NodeClaim",
+      "involved_object_name": "alt-n9kwz",
+      "reason": "TerminationGracePeriodExpiring",
+      "message": "All pods will be deleted by 2026-03-17T01:38:24Z",
+      "event_type": "Warning",
+      "scaling_step": 0,
+      "count": 1
+    },
+    {
+      "timestamp": "2026-03-17T01:39:21+00:00",
+      "namespace": "default",
+      "involved_object_kind": "NodeClaim",
+      "involved_object_name": "alt-q4rsv",
+      "reason": "TerminationGracePeriodExpiring",
+      "message": "All pods will be deleted by 2026-03-17T01:39:31Z",
+      "event_type": "Warning",
+      "scaling_step": 0,
+      "count": 1
+    },
+    {
+      "timestamp": "2026-03-17T01:38:14+00:00",
+      "namespace": "default",
+      "involved_object_kind": "Node",
+      "involved_object_name": "ip-100-64-36-150.us-west-2.compute.internal",
+      "reason": "TerminationGracePeriodExpiring",
+      "message": "All pods will be deleted by 2026-03-17T01:38:24Z",
+      "event_type": "Warning",
+      "scaling_step": 0,
+      "count": 1
+    },
+    {
+      "timestamp": "2026-03-17T01:38:15+00:00",
+      "namespace": "default",
+      "involved_object_kind": "Node",
+      "involved_object_name": "ip-100-64-36-150.us-west-2.compute.internal",
+      "reason": "FailedDraining",
+      "message": "Failed to drain node, 25 pods are waiting to be evicted",
+      "event_type": "Warning",
+      "scaling_step": 0,
+      "count": 1
+    },
+    {
+      "timestamp": "2026-03-17T01:39:20+00:00",
+      "namespace": "default",
+      "involved_object_kind": "Node",
+      "involved_object_name": "ip-100-64-36-150.us-west-2.compute.internal",
+      "reason": "DeletingNodeFailed",
+      "message": "Failed deleting node ip-100-64-36-150.us-west-2.compute.internal: nodes \"ip-100-64-36-150.us-west-2.compute.internal\" not found",
+      "event_type": "Warning",
+      "scaling_step": 0,
+      "count": 1
+    },
+    {
+      "timestamp": "2026-03-17T01:38:15+00:00",
+      "namespace": "default",
+      "involved_object_kind": "Node",
+      "involved_object_name": "ip-100-64-44-73.us-west-2.compute.internal",
+      "reason": "FailedDraining",
+      "message": "Failed to drain node, 29 pods are waiting to be evicted",
+      "event_type": "Warning",
+      "scaling_step": 0,
+      "count": 1
+    },
+    {
+      "timestamp": "2026-03-17T01:38:15+00:00",
+      "namespace": "default",
+      "involved_object_kind": "Node",
+      "involved_object_name": "ip-100-64-49-145.us-west-2.compute.internal",
+      "reason": "FailedDraining",
+      "message": "Failed to drain node, 17 pods are waiting to be evicted",
+      "event_type": "Warning",
+      "scaling_step": 0,
+      "count": 1
+    },
+    {
+      "timestamp": "2026-03-17T01:39:21+00:00",
+      "namespace": "default",
+      "involved_object_kind": "Node",
+      "involved_object_name": "ip-192-168-82-200.us-west-2.compute.internal",
+      "reason": "FailedDraining",
+      "message": "Failed to drain node, 10 pods are waiting to be evicted",
+      "event_type": "Warning",
+      "scaling_step": 0,
+      "count": 1
+    }
+  ],
+  "node_metrics": [],
+  "node_diagnostics": [],
+  "evidence_references": [
+    "pods:pending=0,creating=0",
+    "warnings:TerminationGracePeriodExpiring=8,FailedDraining=4,DeletingNodeFailed=1"
+  ],
+  "root_cause": "DeletingNodeFailed x1 \u2014 node deletion issues during scaling; FailedDraining x4 \u2014 nodes being replaced mid-scale",
+  "resolved": true
+}
