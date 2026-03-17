@@ -84,19 +84,25 @@ class ScaleTestController:
     async def run(self) -> TestRunSummary:
         """Execute the full test lifecycle.
 
-        1. Preflight capacity validation
-        2. Operator approval
-        3. Update Flux repo manifests to distribute pods across apps
-        4. Git commit + push so Flux reconciles
-        5. Monitor pod ready rate, detect anomalies
-        6. On completion: update manifests back to 0, commit + push
+        Phases (matching docs/test-lifecycle.md):
+            1. Preflight — validate cluster capacity can support the target
+            2. Operator Approval — human gate before scaling begins
+            3. Infrastructure Scaling — deploy iperf3 servers, patch manifests
+            4. Stressor Scaling — distribute pods, commit to Flux, monitor
+            5. Hold at Peak — wait at target count, run health sweep
+            6. Cleanup — reset replicas to 0, drain nodes
+            7. Summary — generate report, cross-validate data, produce chart
         """
         start = datetime.now(timezone.utc)
         run_id = self.evidence_store.create_run(self.config)
         self._evidence_run_id = run_id
         log.info("Test run %s started", run_id)
 
-        # 1. Preflight — include CL2 preload pods in capacity check
+        # ── Phase 1: Preflight ──────────────────────────────────────────
+        # Validate that the cluster has enough capacity (IPs, vCPU quota,
+        # NodePool limits, pod ceiling) to support the target pod count.
+        # If CL2 preload is configured, temporarily inflate the target to
+        # account for the extra pods CL2 will create.
         cl2_extra_pods = 0
         if self.config.cl2_preload:
             from k8s_scale_test.models import CL2PreloadPlan
@@ -134,7 +140,7 @@ class ScaleTestController:
                 "Preflight returned NO_GO. Review the report.", {"report": "preflight.json"}
             )
 
-        # 2. Operator approval
+        # ── Phase 2: Operator Approval ──────────────────────────────────
         approval = await self._prompt_operator(
             "Preflight complete. Approve to proceed with scaling?",
             {"max_achievable": report.max_achievable_pods, "target": self.config.target_pods},
@@ -146,13 +152,19 @@ class ScaleTestController:
                 completed=False, halt_reason="operator_cancelled",
             ))
 
-        # 2a. CL2 preload (if configured) — run concurrently with pod scaling
+        # ── Phase 2a: CL2 Preload (optional, concurrent) ────────────────
+        # ClusterLoader2 creates additional K8s objects (deployments, services,
+        # configmaps, secrets) to simulate a realistic cluster. Runs in a
+        # background task so pod scaling can proceed in parallel.
         cl2_task = None
         if self.config.cl2_preload:
             log.info("CL2 preload: launching concurrently with pod scaling")
             cl2_task = asyncio.create_task(self._run_cl2_preload())
 
-        # 3. Discover deployments and apply role-based filtering
+        # ── Phase 3: Infrastructure Scaling ─────────────────────────────
+        # Discover Flux-managed deployments, apply role-based filtering,
+        # patch resource requests from preflight sizing, and scale
+        # infrastructure services (iperf3 servers) before stressors.
         reader = FluxRepoReader(self.config.flux_repo_path)
         writer = FluxRepoWriter(self.config.flux_repo_path)
         deployments = reader.get_deployments()
@@ -230,10 +242,15 @@ class ScaleTestController:
         else:
             targets = []
 
-        # 4. Clean slate — delete existing events in target namespaces
+        # ── Phase 4: Clean Slate ───────────────────────────────────────
+        # Delete existing K8s events so the anomaly detector only sees
+        # events from this test run.
         await self._delete_events(namespaces)
 
-        # 5. Set up monitoring components
+        # ── Phase 5: Monitoring Setup ─────────────────────────────────
+        # Wire up the monitoring pipeline: PodRateMonitor (watch-based
+        # rate tracking), AnomalyDetector (alert investigation), EventWatcher
+        # (event persistence), and HealthSweepAgent (peak-load node checks).
         monitor = PodRateMonitor(self.config, self.k8s_client, self.evidence_store, run_id, namespaces)
         self._monitor = monitor
         node_metrics = NodeMetricsAnalyzer(self.config, self.k8s_client, self.config.prometheus_url)
@@ -286,22 +303,27 @@ class ScaleTestController:
             log.warning("Failed to initialize agent context writer: %s", exc)
             self._ctx_writer = None
 
-        # 6. Start watchers
+        # ── Phase 6: Start Watchers ────────────────────────────────────
         await watcher.start(run_id, lambda: self._current_step)
         await monitor.start()
 
-        # 6a. Launch independent observer process for rate cross-validation
+        # Launch an independent observer process that counts actual Running
+        # pods via the pod list API — a completely different data path from
+        # the monitor's deployment watch. Used for post-run cross-validation.
         observer_proc = await self._start_observer(run_id, namespaces)
 
-        # 7. Scale, hold-at-peak, sweep, cleanup — all protected by try/finally
-        #    so monitor/watcher/observer ALWAYS get stopped even on exceptions.
+        # ── Phase 7: Stressor Scaling + Hold at Peak ──────────────────
+        # Scale pods, hold at target count, run health sweep. All protected
+        # by try/finally so monitor/watcher/observer ALWAYS get stopped
+        # even if scaling or the sweep throws an exception.
         try:
             result = await self._execute_scaling_via_flux(
                 writer, targets, deployments, anomaly,
             )
 
-            # 7. Check Karpenter health if we saw capacity errors during scaling
-            # 7. Hold at peak — wait for monitor to confirm target, then hold
+            # ── Phase 7a: Hold at Peak ─────────────────────────────────
+            # Wait for the monitor to confirm target pod count, then hold
+            # for the configured duration while running health checks.
             hold = getattr(self.config, 'hold_at_peak', 90)
             target = self.config.target_pods
             log.info("Waiting for monitor to confirm %d pods ready before hold...", target)
@@ -350,7 +372,8 @@ class ScaleTestController:
         # Karpenter check runs after monitor stops — doesn't affect rate data
         self._karpenter_health = await infra_agent.check_if_needed(self._findings)
 
-        # 8. Cleanup pods — delete replicas and record delete rate
+        # ── Phase 8: Cleanup ───────────────────────────────────────────
+        # Reset all replicas to 0 and record the pod deletion rate.
         if self._ctx_writer:
             self._ctx_writer.update_phase("cleanup", datetime.now(timezone.utc))
         await self._cleanup_pods(writer, all_labeled)
@@ -368,7 +391,10 @@ class ScaleTestController:
         if self.config.cl2_preload:
             await self._cleanup_cl2()
 
-        # 8. Summary + chart + verify — after both scale-up AND delete data is collected
+        # ── Phase 9: Summary + Verification ───────────────────────────
+        # Generate the test run summary, cross-validate rate data against
+        # the observer, produce the HTML chart, and optionally auto-ingest
+        # resolved findings into the Known Issues KB.
         summary = self._make_summary(run_id, start, report, result)
         self.evidence_store.save_summary(run_id, summary)
         self._verify_run_data(run_id, result)
@@ -538,10 +564,37 @@ class ScaleTestController:
         deployments,
         anomaly: AnomalyDetector,
     ) -> ScalingResult:
-        """Scale by setting the full target in one commit, then monitor until done.
+        """Scale pods by committing target replicas to the Flux Git repo.
 
-        One git commit → one Flux reconcile → K8s handles the rest.
-        The monitor tracks per-second ready rates continuously.
+        Strategy: one git commit sets the full target replica count across
+        all deployments → one Flux reconcile picks it up → K8s handles the
+        rest. There are no incremental steps — the entire target is set at
+        once and we monitor until all pods are Ready or we hit the timeout.
+
+        The polling loop (every 5s) does four things:
+        1. Reads pod counts from the monitor (no API call — the monitor's
+           watch threads maintain real-time counts).
+        2. Refreshes the K8s token every 10 minutes (EKS tokens expire
+           after 15 minutes; refreshing at 10 prevents mid-scale auth failures).
+        3. Triggers background diagnostics once after 60s if pods are still
+           Pending (gives the anomaly detector early signal without blocking).
+        4. Breaks when ready >= target or elapsed > timeout.
+
+        Parameters
+        ----------
+        writer : FluxRepoWriter
+            Writes replica counts to Flux-managed YAML manifests.
+        targets : list[tuple[str, int, str]]
+            ``(deployment_name, replica_count, source_path)`` tuples.
+        deployments :
+            All discovered deployments (for namespace extraction).
+        anomaly : AnomalyDetector
+            Handles timeout alerts if scaling doesn't complete.
+
+        Returns
+        -------
+        ScalingResult
+            Summary of the scaling operation.
         """
         if not targets:
             log.warning("No deployments found to scale")
@@ -785,11 +838,11 @@ class ScaleTestController:
             return "continue"
 
     async def _count_pods(self) -> tuple[int, int, int]:
-        """Read pod counts from the monitor's watch — no API call needed.
+        """Return ``(ready, pending, total)`` pod counts.
 
-        The monitor maintains real-time counts via K8s deployment watches
-        running in background threads. Reading from it is instant and
-        doesn't compete with the event loop or API server.
+        Reads from the monitor's watch-maintained counters (instant, no API
+        call). Falls back to a direct K8s API call only if the monitor isn't
+        running yet (e.g., during preflight or cleanup).
         """
         if hasattr(self, '_monitor') and self._monitor._running:
             return self._monitor.get_counts()
@@ -821,8 +874,11 @@ class ScaleTestController:
         return 0, 0, 0
 
     async def _count_nodes(self) -> int:
-        """Read node count from the monitor's watch-maintained counter.
-        Falls back to API poll if monitor isn't running yet."""
+        """Return the current node count.
+
+        Reads from the monitor's watch-maintained counter. Falls back to
+        a direct K8s API call if the monitor isn't running.
+        """
         if hasattr(self, '_monitor') and self._monitor._running:
             return self._monitor.get_node_count()
         # Fallback: direct API call
@@ -850,7 +906,21 @@ class ScaleTestController:
                 log.error("Failed to refresh K8s token: %s", exc)
 
     def _verify_run_data(self, run_id: str, result) -> None:
-        """Cross-check rate_data (from deployment watch) against observer (from pod list API)."""
+        """Cross-validate rate_data.jsonl (from deployment watch) against observer.log (from pod list API).
+
+        The monitor and observer use completely different K8s API paths:
+        - Monitor: watches Deployment .status.readyReplicas (fast, event-driven)
+        - Observer: lists actual pods in Running phase (slower, poll-based)
+
+        Discrepancies between them indicate deployment controller lag,
+        monitor watch disconnects, or API server inconsistencies.
+
+        Checks performed:
+        1. Data point count vs expected (duration / 5s tick interval)
+        2. Peak ready count matches between monitor and controller
+        3. Gaps in monitoring data
+        4. Observer vs monitor peak count and peak rate cross-check
+        """
         import json
         from pathlib import Path
 
@@ -975,10 +1045,16 @@ class ScaleTestController:
     def _classify_run_validity(
         result: ScalingResult, findings: list[Finding], target: int,
     ) -> tuple[RunValidity, str]:
-        """Classify whether the test run is valid.
+        """Classify whether the test run produced valid data.
 
-        Primary criterion: did we reach the target pod count?
-        Findings are informational — they don't override a successful scale.
+        The primary criterion is simple: did we reach the target pod count?
+        Findings (anomaly investigations) are informational — they don't
+        invalidate a run that successfully scaled to target.
+
+        Returns
+        -------
+        tuple[RunValidity, str]
+            ``(VALID|INVALID, reason_string)``
         """
         if not result.completed:
             return RunValidity.INVALID, result.halt_reason or "target_not_reached"

@@ -1,9 +1,32 @@
 """Node health sweep agent — samples fleet health at peak load.
 
 Runs during hold-at-peak to answer: "we hit target pod count, but what
-do the nodes look like under this load?" Uses 1 SSM call per sampled
-node (single combined command) checking PSI, kubelet health, disk
-readiness, and per-core CPU.
+do the nodes look like under this load?"
+
+Two data collection paths:
+
+1. AMP/Prometheus path (preferred):
+   Runs fleet-wide PromQL queries that return per-node metrics for ALL
+   nodes in one API call. These are "fleet-level queries" — a single
+   PromQL expression like ``avg by(node)(rate(node_cpu_seconds_total...))``
+   returns a vector with one entry per node. This is efficient because
+   Prometheus aggregates the data server-side.
+
+   Combined with K8s node condition checks (Ready, DiskPressure, etc.)
+   for a complete picture.
+
+2. SSM fallback path:
+   Used when AMP/Prometheus is not configured. Runs a single combined
+   shell command on each sampled node via AWS Systems Manager (SSM).
+   This is "per-node" — one SSM send_command call per node, but all
+   calls fire in parallel via ``asyncio.gather`` so wall time is ~15s
+   regardless of sample size.
+
+   The SSM fallback exists because:
+   - Not all clusters have Prometheus/AMP configured
+   - SSM can collect low-level data not available in Prometheus (PSI
+     pressure stall info, kubelet healthz endpoint, NVMe disk readiness)
+   - It provides a safety net when the Prometheus endpoint is unreachable
 
 All SSM calls fire in parallel via asyncio.gather so wall time is ~15s
 regardless of sample size. Raw output is persisted to the evidence store
@@ -147,7 +170,18 @@ class K8sConditionChecker:
 
 
 class AMPMetricCollector:
-    """Collects node metrics from AMP or direct Prometheus via PromQL."""
+    """Collects per-node metrics from AMP or direct Prometheus via PromQL.
+
+    Runs fleet-level PromQL queries — each query returns a vector with one
+    result per node. This is fundamentally different from the SSM fallback
+    which runs commands on individual nodes:
+
+    - PromQL: 1 HTTP request → metrics for ALL nodes (server-side aggregation)
+    - SSM: 1 API call PER node (client-side collection)
+
+    Categories queried: cpu, memory, disk, network_errors, pod_restarts.
+    All queries run concurrently via ``asyncio.gather``.
+    """
 
     _QUERIES: dict[str, str] = {
         "cpu": '100 - (avg by(node)(rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100)',
@@ -304,8 +338,16 @@ HEALTH_CHECK_CMD = (
 
 
 class SSMFallbackCollector:
-    """SSM-based sweep — used when AMP/Prometheus are not configured,
-    or for collecting low-level data (PSI, bpftrace, BPF tools) not in AMP."""
+    """SSM-based node health collection — used when AMP/Prometheus is unavailable.
+
+    Runs a single combined shell command per node via AWS Systems Manager.
+    The command checks PSI (CPU/memory/IO pressure), kubelet systemd status,
+    root filesystem capacity, and per-core CPU utilization (mpstat).
+
+    This collects low-level OS data that Prometheus typically doesn't expose
+    (e.g., /proc/pressure/*, kubelet healthz endpoint, NVMe initialization
+    state). It's also the only option when no metrics pipeline is configured.
+    """
 
     def __init__(self, k8s_client, node_diag: NodeDiagnosticsCollector,
                  extra_commands: dict[str, str] | None = None) -> None:
@@ -401,7 +443,16 @@ class SSMFallbackCollector:
 
 
 class HealthSweepAgent:
-    """Samples fleet health at peak load using AMP, K8s API, or SSM fallback."""
+    """Orchestrates fleet health sampling at peak load.
+
+    Chooses the collection path based on configuration:
+    - If ``config.amp_workspace_id`` or ``config.prometheus_url`` is set:
+      uses AMPMetricCollector (fleet-level PromQL) + K8sConditionChecker.
+    - Otherwise: uses SSMFallbackCollector (per-node SSM commands).
+
+    Results are always persisted to ``diagnostics/health_sweep.json``
+    in the evidence store, even on partial failure.
+    """
 
     def __init__(self, config: TestConfig, k8s_client,
                  node_diag: NodeDiagnosticsCollector,

@@ -1,8 +1,29 @@
-"""Anomaly detection — general-purpose evidence collection and correlation.
+"""Anomaly detection — evidence-driven investigation pipeline.
 
-Collects evidence from every available layer (K8s events, pod state by phase,
-node state, EC2 ENI state, SSM node logs), then correlates. Dynamic SSM command
-selection based on what events reveal. No hardcoded failure-mode detectors.
+When the monitor detects a rate drop or timeout, this module investigates
+by collecting evidence from every available layer and correlating it to
+find a root cause. The investigation is structured as a pipeline of
+layers, each adding more detail:
+
+Investigation layers (in order):
+    1. K8s Warning events — the cheapest signal; always collected first.
+    2. Pod phase breakdown — distinguishes Pending (unschedulable) from
+       ContainerCreating (scheduled but CNI/runtime issues).
+    3. Stuck-pod nodes — identifies which nodes have Pending pods.
+    4. Node conditions — K8s-reported problems (NotReady, MemoryPressure).
+    5. EC2 ENI/prefix state — checks VPC networking (IP exhaustion,
+       IPAMD failures). Only runs if an AWS client is available.
+    6. SSM node diagnostics — runs shell commands on problem nodes to
+       collect low-level evidence (logs, PSI, disk, CPU). Commands are
+       chosen dynamically based on what earlier layers found.
+
+The pipeline is evidence-driven: each layer's output determines what
+the next layer investigates. For example, FailedCreatePodSandBox events
+trigger IPAMD log collection via SSM, while OOMKilling events trigger
+memory/PSI checks.
+
+No hardcoded failure-mode detectors — the correlation logic scans all
+collected evidence for known patterns and assembles a root cause string.
 """
 
 import asyncio
@@ -25,6 +46,32 @@ log = logging.getLogger(__name__)
 
 
 class AnomalyDetector:
+    """Investigates alerts by collecting multi-layer evidence and correlating it.
+
+    Parameters
+    ----------
+    config : TestConfig
+        Test configuration (time windows, thresholds, KB settings).
+    k8s_client :
+        Kubernetes API client module.
+    node_metrics : NodeMetricsAnalyzer
+        Queries Prometheus for node-level metrics.
+    node_diag : NodeDiagnosticsCollector
+        Runs SSM commands on EC2 instances for low-level diagnostics.
+    evidence_store : EvidenceStore
+        Persists findings to disk.
+    run_id : str
+        Current test run identifier.
+    operator_cb : callable, optional
+        Async callback to notify the operator of unresolved findings.
+    aws_client : optional
+        Boto3 session for EC2 API calls (ENI/subnet queries).
+    kb_store : KBStore, optional
+        Known-issues knowledge base for pattern matching.
+    kb_matcher : SignatureMatcher, optional
+        Matches current events against known KB entries.
+    """
+
     def __init__(
         self, config: TestConfig, k8s_client,
         node_metrics: NodeMetricsAnalyzer,
@@ -48,7 +95,26 @@ class AnomalyDetector:
         self._node_cache: dict[str, str] = {}  # node_name -> instance_id
 
     async def handle_alert(self, alert: Alert) -> Finding:
-        """Investigate by collecting evidence from all layers, then correlate."""
+        """Run the full investigation pipeline for a single alert.
+
+        Collects evidence from all layers (K8s events → pod phases → stuck
+        nodes → node conditions → ENI state → SSM diagnostics), then
+        correlates everything into a Finding with a root cause (or None
+        if inconclusive).
+
+        If a Known Issues KB is configured, checks for matching patterns
+        first — a KB hit short-circuits the full investigation.
+
+        Parameters
+        ----------
+        alert : Alert
+            The alert that triggered this investigation (rate drop, timeout, etc.).
+
+        Returns
+        -------
+        Finding
+            The investigation result, persisted to the evidence store.
+        """
         log.info("Investigating: %s", alert.message)
         ns_list = alert.context.get("namespaces", ["default"])
         window = timedelta(minutes=self.config.event_time_window_minutes)
@@ -133,8 +199,28 @@ class AnomalyDetector:
     # ------------------------------------------------------------------
 
     async def _collect_k8s_events(self, namespaces, time_window):
-        """Collect Warning events. Events are cleared before each test,
-        so everything here is from the current run. Paginate to handle volume."""
+        """Collect Warning events from K8s API (Layer 1).
+
+        Events are cleared before each test run (by the controller), so
+        everything returned here is from the current run — no time
+        filtering needed.
+
+        Paginates with limit=200 per page to handle high-volume clusters
+        where thousands of Warning events can accumulate during scaling.
+
+        Parameters
+        ----------
+        namespaces : list[str]
+            Namespaces to query.
+        time_window : timedelta
+            Not currently used for filtering (events are pre-cleared),
+            but kept for future use.
+
+        Returns
+        -------
+        list[K8sEvent]
+            All Warning events across the given namespaces.
+        """
         result = []
         loop = asyncio.get_event_loop()
         try:
@@ -174,7 +260,18 @@ class AnomalyDetector:
         return result
 
     async def _get_pod_phase_breakdown(self, namespaces):
-        """Get pod phase counts from deployment status — no pod listing needed."""
+        """Get pod phase counts from Deployment status objects (Layer 2).
+
+        Uses Deployment .status.replicas and .status.readyReplicas to
+        infer Pending vs Running counts. This is much cheaper than listing
+        all pods individually — a single list_namespaced_deployment call
+        covers hundreds of deployments.
+
+        Returns
+        -------
+        dict[str, int]
+            Counts keyed by phase name (Pending, Running, etc.).
+        """
         phases = {"Pending": 0, "ContainerCreating": 0, "Running": 0,
                   "Succeeded": 0, "Failed": 0, "Unknown": 0}
         try:
@@ -195,7 +292,22 @@ class AnomalyDetector:
             return phases
 
     async def _find_stuck_pod_nodes(self, namespaces):
-        """Find nodes with Pending pods. Uses field_selector + limit to keep response small."""
+        """Find nodes that have Pending pods assigned to them (Layer 3).
+
+        A pod that is Pending *and* has a node_name means it was scheduled
+        but something on that node is preventing it from starting (CNI,
+        disk, kubelet issues). This is different from unschedulable pods
+        (which have no node_name).
+
+        Limits to 200 pods per namespace and returns the top 20 nodes
+        by stuck-pod count to keep the response manageable.
+
+        Returns
+        -------
+        list[tuple[str, str]]
+            List of ``(node_name, ec2_instance_id)`` pairs, sorted by
+            stuck-pod count descending.
+        """
         try:
             loop = asyncio.get_event_loop()
             def _scan():
@@ -226,7 +338,28 @@ class AnomalyDetector:
             return []
 
     async def _collect_eni_state(self, nodes):
-        """Query EC2 ENI/prefix counts + subnet IPs. Runs in executor to not block event loop."""
+        """Query EC2 ENI and prefix-delegation state for problem nodes (Layer 5).
+
+        For each node, checks:
+        - How many ENIs are attached (eni_count)
+        - How many IPv4 prefixes are delegated (prefix_count) — zero means
+          the VPC CNI's IPAMD has no IP addresses to assign to pods
+        - Subnet available IPs — low counts indicate IP exhaustion in the AZ
+
+        Runs in executor threads to avoid blocking the event loop, since
+        each EC2 API call can take 100-500ms.
+
+        Parameters
+        ----------
+        nodes : list[tuple[str, str]]
+            List of ``(node_name, instance_id)`` pairs to check.
+
+        Returns
+        -------
+        dict[str, dict]
+            Keyed by node_name, values contain eni_count, prefix_count,
+            subnet_id, az, and subnet_available_ips.
+        """
         import asyncio
         loop = asyncio.get_event_loop()
         result = {}
@@ -269,56 +402,90 @@ class AnomalyDetector:
     # ------------------------------------------------------------------
 
     def _pick_ssm_commands(self, warning_reasons, eni_evidence):
-        """Choose extra SSM commands based on what events and EC2 data show.
+        """Choose extra SSM commands based on what events and EC2 data revealed.
 
-        Each command here adds an SSM send_command call per investigated node
-        (up to 3 nodes). Only add commands when evidence justifies them.
+        This is the "dynamic command selection" — instead of always running
+        every possible diagnostic, we only run commands that are relevant to
+        the symptoms we've already observed. This matters because each command
+        adds an SSM send_command call per investigated node (up to 3 nodes),
+        and SSM calls are slow (~5s each).
+
+        The logic follows a simple pattern:
+            IF we saw event X → THEN collect diagnostic Y
+
+        Parameters
+        ----------
+        warning_reasons : dict[str, int]
+            Event reason → count mapping from K8s Warning events.
+        eni_evidence : dict[str, dict]
+            Per-node ENI/prefix data from ``_collect_eni_state``.
+
+        Returns
+        -------
+        dict[str, str]
+            Label → shell command mapping to pass to SSM.
         """
         extra = {}
+        # Check if any node has zero IPv4 prefixes — indicates IPAMD failure
         zero_pfx = any(v.get("prefix_count", -1) == 0 for v in eni_evidence.values())
 
-        # --- CNI / IPAMD checks — triggered by sandbox failures or zero prefixes ---
+        # --- CNI / IPAMD checks ---
+        # FailedCreatePodSandBox means the CNI plugin couldn't set up networking.
+        # Zero prefixes confirms the IPAMD has no IPs to hand out.
+        # Either symptom justifies pulling IPAMD logs and CNI config.
         if warning_reasons.get("FailedCreatePodSandBox", 0) > 0 or zero_pfx:
             extra["ipamd_log"] = "tail -200 /var/log/aws-routed-eni/ipamd.log 2>/dev/null || echo NO_IPAMD_LOG"
             extra["cni_config"] = "cat /etc/cni/net.d/* 2>/dev/null | head -50"
 
-        # --- Disk / image checks — triggered by pull failures ---
+        # --- Disk / image checks ---
+        # "Failed" and "ErrImagePull" suggest container image pull failures,
+        # which can be caused by full disks or registry auth issues.
         if warning_reasons.get("Failed", 0) > 0 or warning_reasons.get("ErrImagePull", 0) > 0:
             extra["disk_images"] = "df -h; echo '---'; crictl images 2>/dev/null | tail -20"
 
-        # --- Memory checks — triggered by evictions or OOM ---
+        # --- Memory checks ---
+        # Evictions and OOM kills indicate memory pressure. PSI (Pressure
+        # Stall Information) from /proc/pressure/ confirms whether the kernel
+        # is actively stalling processes due to memory contention.
         if warning_reasons.get("Evicted", 0) > 0 or warning_reasons.get("OOMKilling", 0) > 0:
             extra["memory"] = "cat /proc/meminfo | head -10; echo '---'; dmesg | grep -i oom | tail -10"
-            # PSI confirms memory pressure before OOM — only when we see memory events
             extra["psi"] = (
                 "cat /proc/pressure/cpu 2>/dev/null; echo '===PSI_SEP==='; "
                 "cat /proc/pressure/memory 2>/dev/null; echo '===PSI_SEP==='; "
                 "cat /proc/pressure/io 2>/dev/null"
             )
 
-        # --- Scheduling checks — triggered by FailedScheduling ---
+        # --- Scheduling checks ---
+        # FailedScheduling means the scheduler couldn't place pods. Kubelet
+        # config (maxPods, reservations) may be misconfigured.
         if warning_reasons.get("FailedScheduling", 0) > 0:
             extra["kubelet_cfg"] = "cat /etc/kubernetes/kubelet/kubelet-config.json 2>/dev/null | head -30"
 
-        # --- Node readiness checks — triggered by NotReady or InvalidDiskCapacity ---
+        # --- Node readiness checks ---
+        # NodeNotReady can be caused by kubelet crashes or TLS bootstrap
+        # delays (common during rapid scale-up when many nodes join at once).
         if warning_reasons.get("NodeNotReady", 0) > 0:
             extra["kubelet_status"] = "systemctl status kubelet --no-pager -l 2>&1 | tail -20"
-            # Kubelet healthz catches TLS bootstrap delays seen in scale test logs
             extra["kubelet_health"] = (
                 "curl -sk https://localhost:10250/healthz 2>&1; echo '===HEALTH_SEP==='; "
                 "systemctl is-active kubelet 2>&1"
             )
 
+        # InvalidDiskCapacity fires on i4i instances when the NVMe root
+        # volume hasn't finished initializing during boot. lsblk + df
+        # confirms whether the volume is actually mounted.
         if warning_reasons.get("InvalidDiskCapacity", 0) > 0:
-            # NVMe readiness: catches the i4i root volume setup race
             extra["disk_readiness"] = "lsblk 2>/dev/null | grep nvme; echo '---'; df -h / 2>/dev/null"
 
-        # --- Per-core CPU — only when nodes show high CPU or stuck pods with no other cause ---
-        # mpstat takes 1s to sample, so only run when we suspect CPU saturation
+        # --- Per-core CPU check ---
+        # mpstat takes 1 second to sample, so only run it when we suspect
+        # CPU saturation. Two triggers:
+        # 1. Eviction events (CPU pressure can cause evictions)
+        # 2. We have warning events but none of the specific checks above
+        #    matched — something is wrong but we don't know what, so check CPU.
         total_warnings = sum(warning_reasons.values())
         if (warning_reasons.get("Evicted", 0) > 0
                 or (total_warnings > 0 and not extra)):
-            # No specific cause identified but something is wrong — check CPU cores
             extra["mpstat"] = "mpstat -P ALL 1 1 2>/dev/null | tail -n +4 || echo NO_MPSTAT"
 
         return extra
@@ -329,6 +496,34 @@ class AnomalyDetector:
 
     def _correlate(self, alert, events, metrics, diagnostics,
                    stuck_nodes, eni_evidence, phase_breakdown):
+        """Combine all collected evidence into a single Finding.
+
+        Builds an evidence_references list (human-readable summary strings),
+        determines severity from evidence weight, and attempts to extract
+        a root cause from all layers.
+
+        Parameters
+        ----------
+        alert : Alert
+            The original alert that triggered investigation.
+        events : list[K8sEvent]
+            All collected K8s Warning events.
+        metrics : list[NodeMetric]
+            Node-level metrics from problem nodes.
+        diagnostics : list[NodeDiagnostic]
+            SSM command outputs from investigated nodes.
+        stuck_nodes : list[tuple[str, str]]
+            Nodes with Pending pods.
+        eni_evidence : dict
+            Per-node ENI/prefix data.
+        phase_breakdown : dict
+            Pod phase counts.
+
+        Returns
+        -------
+        Finding
+            Complete investigation result.
+        """
         warnings = [e for e in events if e.event_type == "Warning"]
         warning_reasons = self._count_warning_reasons(events)
         evidence_refs = []
@@ -395,6 +590,18 @@ class AnomalyDetector:
         )
 
     def _assess_severity(self, warnings, stuck_nodes, eni_evidence):
+        """Determine finding severity from evidence weight.
+
+        Severity escalation rules:
+        - CRITICAL: any node has zero prefixes (complete networking failure),
+          OR >10 stuck nodes, OR >50 warning events.
+        - WARNING: any stuck nodes exist, OR >10 warning events.
+        - INFO: everything else (minor or transient issues).
+
+        Returns
+        -------
+        Severity
+        """
         zero_pfx = sum(1 for v in eni_evidence.values() if v.get("prefix_count", -1) == 0)
         if zero_pfx > 0:
             return Severity.CRITICAL
@@ -406,10 +613,41 @@ class AnomalyDetector:
 
     def _extract_root_cause(self, warning_reasons, eni_evidence,
                             diagnostics, phase_breakdown):
-        """Scan all evidence for root cause. Returns None if inconclusive."""
+        """Scan all collected evidence for root cause patterns.
+
+        Checks evidence in priority order (most common scale-test failures first):
+        1. Karpenter / capacity issues (InsufficientCapacityError, etc.)
+        2. Pod sandbox / CNI failures (FailedCreatePodSandBox)
+        3. ENI / prefix exhaustion (zero prefixes, subnet IP exhaustion)
+        4. SSM log patterns (IPAMD empty datastore, API throttling, OOM)
+        5. Proactive node health (PSI, kubelet, disk, CPU saturation)
+        6. Phase-based clues (large Pending or ContainerCreating counts)
+
+        Returns None if no pattern matches — the finding is "unresolved"
+        and the operator is notified.
+
+        Parameters
+        ----------
+        warning_reasons : dict[str, int]
+            Event reason → count from K8s Warning events.
+        eni_evidence : dict
+            Per-node ENI/prefix data.
+        diagnostics : list[NodeDiagnostic]
+            SSM command outputs.
+        phase_breakdown : dict
+            Pod phase counts.
+
+        Returns
+        -------
+        str | None
+            Semicolon-separated root cause string, or None if inconclusive.
+        """
         clues = []
 
         # --- Karpenter / capacity issues (most common at scale) ---
+        # InsufficientCapacityError means EC2 couldn't launch the requested
+        # instance type — either spot capacity is exhausted or the NodePool
+        # CPU limit has been reached.
         ice = warning_reasons.get("InsufficientCapacityError", 0)
         if ice > 0:
             clues.append(f"InsufficientCapacityError x{ice} — Karpenter cannot provision nodes "
@@ -417,14 +655,19 @@ class AnomalyDetector:
 
         idc = warning_reasons.get("InvalidDiskCapacity", 0)
         if idc > 0:
-            # Usually transient on i4i — NVMe root volume setup race during boot
-            # Only flag if it persists alongside other capacity issues
+            # InvalidDiskCapacity is usually transient on i4i instances — the
+            # NVMe root volume takes a few seconds to initialize during boot.
+            # Only flag it as a root cause if it persists (>50 events) AND
+            # there are no InsufficientCapacityError events (which would be
+            # the real problem, with disk errors as a side effect).
             if ice == 0 and idc > 50:
                 clues.append(f"InvalidDiskCapacity x{idc} — persistent disk setup failures")
 
         tgpe = warning_reasons.get("TerminationGracePeriodExpiring", 0)
         if tgpe > 0 and ice > 0:
-            # These pair with InsufficientCapacityError — failed nodeclaims expiring
+            # TerminationGracePeriodExpiring events appear alongside
+            # InsufficientCapacityError — they're Karpenter cleaning up
+            # NodeClaims that failed to provision. Not a separate issue.
             clues.append(f"TerminationGracePeriodExpiring x{tgpe} — failed nodeclaim cleanup")
 
         dnf = warning_reasons.get("DeletingNodeFailed", 0)
@@ -664,6 +907,7 @@ class AnomalyDetector:
     # ------------------------------------------------------------------
 
     def _count_warning_reasons(self, events):
+        """Tally Warning events by reason. Returns ``{reason: count}``."""
         reasons = {}
         for e in events:
             if e.event_type == "Warning":
@@ -671,6 +915,17 @@ class AnomalyDetector:
         return reasons
 
     def _merge_targets(self, stuck, condition_problems):
+        """Combine stuck-pod nodes and condition-problem nodes into a deduplicated list.
+
+        Stuck-pod nodes come first (they're the primary investigation targets),
+        followed by nodes with bad K8s conditions that weren't already in the
+        stuck list.
+
+        Returns
+        -------
+        list[tuple[str, str]]
+            Deduplicated ``(node_name, instance_id)`` pairs.
+        """
         seen = set()
         result = []
         for name, iid in stuck:
@@ -684,6 +939,16 @@ class AnomalyDetector:
         return result
 
     def _resolve_instance_id(self, node_name):
+        """Look up the EC2 instance ID for a K8s node name.
+
+        Reads the node's ``spec.providerID`` (format: ``aws:///az/i-xxx``)
+        and extracts the instance ID from the last path segment.
+
+        Returns
+        -------
+        str
+            EC2 instance ID, or empty string if lookup fails.
+        """
         try:
             v1 = self.k8s_client.CoreV1Api()
             node = v1.read_node(node_name)

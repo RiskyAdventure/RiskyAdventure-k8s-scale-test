@@ -22,17 +22,36 @@ log = logging.getLogger(__name__)
 
 
 class EvidenceStore:
-    """Persists all test artifacts to disk in JSON format.
+    """Persists all test artifacts to disk in JSON/JSONL format.
+
+    Every test run gets its own directory under ``output_dir``. The
+    directory layout is designed so each artifact type is easy to find
+    and can be loaded independently:
 
     Directory layout per run::
 
-        {output_dir}/{run_id}/
-            preflight.json
-            rate_data.jsonl
-            events.jsonl
-            findings/{finding_id}.json
-            diagnostics/{node}_{ts}.json
-            summary.json
+        {output_dir}/
+        └── {run_id}/                      # e.g. "2024-03-15_14-30-00"
+            ├── config.json                # TestConfig snapshot at run start
+            ├── preflight.json             # Capacity validation results
+            ├── rate_data.jsonl            # One JSON line per 5s tick (pod ready rate)
+            ├── events.jsonl               # K8s Warning events (append-only)
+            ├── summary.json               # Final test run summary
+            ├── cl2_summary.json           # ClusterLoader2 results (if CL2 was run)
+            ├── agent_context.json         # AI sub-agent context file
+            ├── observer.log               # Independent pod-count observer (CSV)
+            ├── findings/                  # Anomaly investigation results
+            │   ├── finding-{id}.json      # One file per investigation
+            │   └── agent-{id}.json        # AI agent findings (if any)
+            └── diagnostics/               # Node-level SSM command outputs
+                ├── {node}_{timestamp}.json # Per-node diagnostic snapshots
+                └── health_sweep.json      # Peak-load health sweep results
+
+    File formats:
+    - ``.json`` files: pretty-printed (indent=2) for human readability.
+    - ``.jsonl`` files: one JSON object per line, append-only. Used for
+      high-frequency data (rate ticks every 5s, events) where we can't
+      afford to rewrite the whole file on each append.
     """
 
     def __init__(self, output_dir: str) -> None:
@@ -44,7 +63,12 @@ class EvidenceStore:
     # ------------------------------------------------------------------
 
     def create_run(self, config: TestConfig) -> str:
-        """Create a new run directory. Returns run ID ``YYYY-MM-DD_HH-MM-SS``."""
+        """Create a new run directory and save the initial config snapshot.
+
+        Returns a run ID in the format ``YYYY-MM-DD_HH-MM-SS`` (UTC).
+        Creates the ``findings/`` and ``diagnostics/`` subdirectories
+        so other methods can write to them immediately.
+        """
         now = datetime.now(timezone.utc)
         run_id = now.strftime("%Y-%m-%d_%H-%M-%S")
         run_dir = self.output_dir / run_id
@@ -141,7 +165,23 @@ class EvidenceStore:
         object_kind: str | None = None,
         object_name: str | None = None,
     ) -> list[K8sEvent]:
-        """Filter stored events by optional criteria. All filters are AND-ed."""
+        """Filter stored events by optional criteria. All filters are AND-ed.
+
+        Reads events.jsonl line by line (no full-file load) so this works
+        even for runs with tens of thousands of events.
+
+        Parameters
+        ----------
+        run_id : str
+            Test run identifier.
+        namespace, reason, object_kind, object_name : str, optional
+            If provided, only events matching ALL specified filters are returned.
+
+        Returns
+        -------
+        list[K8sEvent]
+            Matching events, or empty list if events.jsonl doesn't exist.
+        """
         events_path = self._run_dir(run_id) / "events.jsonl"
         if not events_path.exists():
             return []
@@ -169,7 +209,12 @@ class EvidenceStore:
     # ------------------------------------------------------------------
 
     def load_run(self, run_id: str) -> dict:
-        """Load all artifacts for a run as a dict of raw JSON data."""
+        """Load all artifacts for a run as a dict of raw JSON data.
+
+        Returns a dict with keys like "config", "preflight", "summary",
+        "rate_data" (list), "events" (list), "findings" (list),
+        "diagnostics" (list). Missing files are simply omitted from the dict.
+        """
         rd = self._run_dir(run_id)
         data: dict = {}
 

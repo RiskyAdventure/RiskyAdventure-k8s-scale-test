@@ -4,6 +4,37 @@ Runs a periodic scan loop during scaling and hold-at-peak phases,
 using the MCP servers (AMP, CloudWatch, EKS) to detect problems
 before they cause pod ready rate drops.
 
+Tiered investigation model
+--------------------------
+The scanner uses a two-tier approach to balance breadth and depth:
+
+Tier 1 — Prometheus (broad sweep):
+    Fleet-wide PromQL queries run every 15-30 seconds. These are cheap
+    (one HTTP request covers all nodes) and catch most problems: node
+    count stalls, pending pod backlogs, CPU/memory pressure, Karpenter
+    queue depth, network errors. Think of this as the "smoke detector."
+
+Tier 2 — CloudWatch (drill-down):
+    Only triggered when a Prometheus finding indicates a problem. Queries
+    CloudWatch Logs Insights for error patterns in the EKS dataplane logs.
+    This is more expensive (scans log data) but provides the specific
+    error messages needed to diagnose the issue. Think of this as the
+    "fire investigator" that only shows up after the smoke detector fires.
+
+The tiered approach avoids unnecessary CloudWatch costs during normal
+scaling while still providing deep diagnostics when something goes wrong.
+
+Catalog pattern
+---------------
+Queries are defined as data (``ScanQuery`` objects in a list) rather than
+hardcoded logic. Each query specifies:
+- Which phases it's relevant for (scaling, hold-at-peak)
+- A condition function that checks current context before running
+- An evaluator function that interprets the raw result
+
+This makes it easy to add new queries without touching the scanner loop —
+just append a new ``ScanQuery`` to the catalog.
+
 Responsibility boundaries with other modules:
 - monitor.py: Authoritative source for pod ready rate via K8s deployment
   watch API. The scanner does NOT track pod ready rate — it queries
@@ -23,7 +54,7 @@ Responsibility boundaries with other modules:
 
 Design principles:
 - Phase-aware: different queries run during different test phases
-- Tiered: Prometheus for broad sweeps, CloudWatch/EKS for drill-down
+- Tiered: Prometheus for broad sweeps, CloudWatch for drill-down
 - Catalog-driven: queries are data, not hardcoded logic
 - Adaptive: skips queries that aren't relevant to current conditions
 - Non-blocking: runs in a background task, never stalls the controller
@@ -60,7 +91,36 @@ class Source(Enum):
 
 @dataclass
 class ScanQuery:
-    """A single observability query in the catalog."""
+    """A single observability query in the catalog.
+
+    Each ScanQuery is a self-contained unit: it knows what to ask
+    (``query``), when to ask it (``phases`` + ``condition``), and how
+    to interpret the answer (``evaluate``).
+
+    Attributes
+    ----------
+    name : str
+        Unique identifier for this query (e.g., "cpu_pressure").
+    source : Source
+        Which backend to query (Prometheus, CloudWatch, or EKS).
+    query : str
+        The actual query string (PromQL, CW Insights, or EKS resource spec).
+    phases : list[Phase]
+        Test phases where this query is relevant. The scanner skips
+        queries whose phase doesn't match the current phase.
+    description : str
+        Human-readable explanation of what this query checks.
+    condition : Callable[[dict], bool]
+        Called with the current scan context before running the query.
+        Return False to skip (e.g., no point checking Karpenter queue
+        if node count isn't growing). Defaults to always-True.
+    evaluate : Callable[[Any, dict], ScanResult | None]
+        Called with the raw query result and context. Returns a
+        ScanResult if the result is anomalous, or None if normal.
+    interval_seconds : float
+        Minimum seconds between runs of this query. Some queries
+        (like node_count) run more frequently than others.
+    """
     name: str
     source: Source
     query: str  # PromQL, CW Insights query string, or EKS resource spec
@@ -81,7 +141,29 @@ class ScanQuery:
 
 @dataclass
 class ScanResult:
-    """Output from a scan query evaluation."""
+    """Output from a scan query evaluation — represents a detected anomaly.
+
+    Attributes
+    ----------
+    query_name : str
+        Which catalog query produced this result.
+    severity : Severity
+        How urgent this finding is.
+    title : str
+        One-line summary (e.g., "Fleet avg CPU: 92.3% (threshold: 90)").
+    detail : str
+        Longer explanation with context.
+    source : Source
+        Which backend the data came from.
+    raw_result : Any
+        The raw query response, preserved for evidence storage.
+    drill_down_source : Source | None
+        If set, the scanner should run a follow-up query against this
+        source. This is how Tier 1 (Prometheus) findings trigger
+        Tier 2 (CloudWatch) drill-downs.
+    drill_down_query : str | None
+        The specific query to run for drill-down.
+    """
     query_name: str
     severity: Severity
     title: str
@@ -241,7 +323,10 @@ def _default_catalog() -> list[ScanQuery]:
             ),
         ),
 
-        # --- CloudWatch drill-down (only triggered by Prometheus findings) ---
+        # --- CloudWatch drill-down (Tier 2) ---
+        # Only triggered by Prometheus findings or periodically (every 4th scan).
+        # Queries EKS dataplane logs for error patterns to provide specific
+        # diagnostic detail that Prometheus metrics can't give us.
         ScanQuery(
             name="cw_top_errors",
             source=Source.CLOUDWATCH,
@@ -266,7 +351,12 @@ def _default_catalog() -> list[ScanQuery]:
 # --- Evaluator functions ---
 
 def _extract_scalar(result: dict) -> float | None:
-    """Extract a single scalar value from a Prometheus instant query result."""
+    """Extract a single scalar value from a Prometheus instant query result.
+
+    Prometheus instant queries return a "vector" result type with one or
+    more entries. This helper grabs the numeric value from the first entry.
+    Returns None if the response is empty, malformed, or not a vector.
+    """
     if not isinstance(result, dict):
         return None
     data = result.get("result", [])
@@ -283,6 +373,34 @@ def _eval_threshold(
     label: str, severity: Severity,
     drill_down: Source | None = None,
 ) -> ScanResult | None:
+    """Generic threshold evaluator — returns a ScanResult if value > threshold.
+
+    Used by most catalog queries. The ``drill_down`` parameter triggers
+    Tier 2 investigation: if set, the scanner will run a follow-up query
+    against that source (typically CloudWatch) to get more detail.
+
+    Parameters
+    ----------
+    result : dict
+        Raw Prometheus query response.
+    ctx : dict
+        Current scan context (target_pods, elapsed_minutes, etc.).
+    name : str
+        Query name for the ScanResult.
+    threshold : float
+        Value above which the result is considered anomalous.
+    label : str
+        Human-readable label for the metric.
+    severity : Severity
+        Severity to assign if threshold is exceeded.
+    drill_down : Source | None
+        If set, triggers a Tier 2 query against this source.
+
+    Returns
+    -------
+    ScanResult | None
+        A finding if threshold exceeded, None otherwise.
+    """
     val = _extract_scalar(result)
     if val is None or val <= threshold:
         return None
@@ -296,7 +414,16 @@ def _eval_threshold(
 
 
 def _eval_node_growth(result: dict, ctx: dict) -> ScanResult | None:
-    """Check if node count is growing as expected during scaling."""
+    """Check if node count is growing as expected during scaling.
+
+    Only alerts when ALL of these are true:
+    - Node count hasn't changed since the last scan
+    - At least 3 minutes have elapsed (initial ramp takes time)
+    - More than 1000 pods are still Pending
+
+    This avoids false positives during the initial ramp-up when Karpenter
+    is still launching instances.
+    """
     val = _extract_scalar(result)
     if val is None:
         return None
@@ -318,7 +445,15 @@ def _eval_node_growth(result: dict, ctx: dict) -> ScanResult | None:
 
 
 def _eval_pending_ratio(result: dict, ctx: dict) -> ScanResult | None:
-    """Alert if pending pods are a high fraction of target after initial ramp."""
+    """Alert if pending pods are a high fraction of target after initial ramp.
+
+    After 5 minutes of scaling, more than 60% of pods still Pending
+    suggests a scheduling bottleneck (not enough nodes, resource
+    constraints, or affinity rules preventing placement).
+
+    The 5-minute grace period accounts for the time Karpenter needs to
+    launch instances and for nodes to become Ready.
+    """
     val = _extract_scalar(result)
     if val is None:
         return None
@@ -338,7 +473,12 @@ def _eval_pending_ratio(result: dict, ctx: dict) -> ScanResult | None:
 
 
 def _eval_cw_errors(result: dict, ctx: dict) -> ScanResult | None:
-    """Summarize top CloudWatch error patterns."""
+    """Summarize top CloudWatch error patterns (Tier 2 drill-down).
+
+    This evaluator is only called when a Prometheus finding triggered a
+    CloudWatch drill-down, or periodically (every 4th scan cycle) as a
+    background check. Returns the top 5 error patterns with counts.
+    """
     results = result.get("results", [])
     if not results:
         return None
@@ -355,8 +495,15 @@ def _eval_cw_errors(result: dict, ctx: dict) -> ScanResult | None:
 class ObservabilityScanner:
     """Runs periodic observability scans during scale tests.
 
-    Usage:
-        scanner = ObservabilityScanner(config, prometheus_fn, cloudwatch_fn, eks_fn)
+    The scanner is the "always-on" monitoring layer that complements the
+    reactive anomaly detector. While the anomaly detector investigates
+    AFTER a rate drop is detected, the scanner proactively queries
+    Prometheus and CloudWatch to catch problems BEFORE they affect the
+    pod ready rate.
+
+    Usage::
+
+        scanner = ObservabilityScanner(config, prometheus_fn, cloudwatch_fn)
         scanner.set_phase(Phase.SCALING)
         task = asyncio.create_task(scanner.run())
         # ... scaling happens ...
@@ -397,7 +544,13 @@ class ObservabilityScanner:
         log.info("ObservabilityScanner: phase → %s", phase.value)
 
     def update_context(self, **kwargs) -> None:
-        """Update scan context with current controller state."""
+        """Update scan context with current controller state.
+
+        The controller calls this periodically to feed the scanner with
+        live data (elapsed_minutes, pending pod count, etc.) that the
+        catalog's condition functions and evaluators use to decide what
+        to check and how to interpret results.
+        """
         self._context.update(kwargs)
 
     def on_finding(self, callback: Callable[[ScanResult], None]) -> None:
@@ -411,7 +564,18 @@ class ObservabilityScanner:
         self._running = False
 
     async def run(self) -> None:
-        """Main scan loop. Runs until stop() is called."""
+        """Main scan loop. Runs until ``stop()`` is called.
+
+        Each iteration:
+        1. Selects catalog queries that match the current phase and are
+           due to run (based on their interval_seconds).
+        2. Runs Prometheus queries concurrently (they're independent).
+        3. If any Prometheus finding triggered, marks context so CloudWatch
+           queries know to run (Tier 2 drill-down).
+        4. Runs CloudWatch queries sequentially (they share a log group
+           and running them in parallel can cause throttling).
+        5. Sleeps 5 seconds before the next iteration.
+        """
         self._running = True
         log.info("ObservabilityScanner: started with %d queries in catalog", len(self._catalog))
 
@@ -468,7 +632,13 @@ class ObservabilityScanner:
         log.info("ObservabilityScanner: stopped with %d findings", len(self._findings))
 
     async def _run_query(self, query: ScanQuery, now: float) -> None:
-        """Execute a single query and evaluate the result."""
+        """Execute a single catalog query and evaluate the result.
+
+        Dispatches to the appropriate executor function based on the
+        query's source (Prometheus or CloudWatch). If the evaluator
+        returns a ScanResult, it's appended to findings and the
+        on_finding callback is invoked.
+        """
         try:
             self._last_run[query.name] = now
 
