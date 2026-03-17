@@ -669,8 +669,9 @@ class ScaleTestController:
             import threading
 
             def _poller():
+                consecutive_errors = 0
+                v1 = self.k8s_client.CoreV1Api()
                 try:
-                    v1 = self.k8s_client.CoreV1Api()
                     with open(obs_file, "a") as fh:
                         while self._running:
                             try:
@@ -692,11 +693,24 @@ class ScaleTestController:
                                 ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
                                 fh.write(f"{ts},all {total_running} {total_pending} {total_all}\n")
                                 fh.flush()
-                            except Exception:
-                                pass
+                                consecutive_errors = 0
+                            except Exception as e:
+                                consecutive_errors += 1
+                                err_str = str(e)
+                                # Refresh K8s token on auth errors
+                                if any(x in err_str for x in ("Unauthorized", "401", "ExpiredToken")):
+                                    if hasattr(self.config, '_k8s_reload'):
+                                        try:
+                                            self.config._k8s_reload()
+                                            v1 = self.k8s_client.CoreV1Api()
+                                        except Exception:
+                                            pass
+                                if consecutive_errors <= 3 or consecutive_errors % 10 == 0:
+                                    log.debug("Observer poll error (%d): %s",
+                                              consecutive_errors, type(e).__name__)
                             _time.sleep(10)
-                except Exception:
-                    pass
+                except Exception as e:
+                    log.warning("Observer thread exited: %s", e)
 
             t = threading.Thread(target=_poller, daemon=True)
             t.start()
