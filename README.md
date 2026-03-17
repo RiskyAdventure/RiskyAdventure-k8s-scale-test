@@ -4,6 +4,17 @@ A Kubernetes scale testing framework that orchestrates rapid pod scaling on EKS 
 
 Built for validating EKS infrastructure behavior at 10K–30K+ pod scale — node autoscaling (Karpenter), VPC CNI/IPAMD, scheduler throughput, and container runtime performance.
 
+## Documentation
+
+| Document | What it covers |
+|----------|---------------|
+| [Architecture](docs/architecture.md) | System overview, module map, data flow diagrams, design decisions |
+| [Test Lifecycle](docs/test-lifecycle.md) | Step-by-step walkthrough of every test phase with diagrams |
+| [Monitoring](docs/monitoring.md) | How pod rate measurement works, monitor vs observer, health sweep |
+| [Anomaly Detection](docs/anomaly-detection.md) | Investigation pipeline, SSM command selection, root cause extraction |
+| [Configuration](docs/configuration.md) | All CLI flags, example commands, KB commands |
+| [MCP Setup](docs/mcp-setup.md) | Prometheus, CloudWatch, and EKS MCP server configuration |
+
 ## How It Works
 
 The test controller follows a GitOps workflow via Flux:
@@ -155,7 +166,7 @@ For AI-assisted investigation during scale tests, the tool integrates with three
 | `awslabs.cloudwatch-mcp-server` | Node-level logs | Kubelet, containerd, IPAMD, kube-proxy logs via Logs Insights |
 | `awslabs.eks-mcp-server` | Cluster state | Node conditions, pod events, EKS insights |
 
-See [`.kiro/docs/mcp-server-setup.md`](.kiro/docs/mcp-server-setup.md) for configuration details.
+See [docs/mcp-setup.md](docs/mcp-setup.md) for configuration details.
 
 ## Testing
 
