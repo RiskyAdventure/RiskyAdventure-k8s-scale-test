@@ -39,11 +39,89 @@ from k8s_scale_test.models import (
     TestRunSummary,
 )
 from k8s_scale_test.monitor import PodRateMonitor
+from k8s_scale_test.observability import ObservabilityScanner, Phase as ScanPhase, ScanResult
 from k8s_scale_test.preflight import PreflightChecker
 
 import time as _time
 
 log = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# Scanner executor factories — create the callables that ObservabilityScanner
+# needs without modifying any existing module.
+# ---------------------------------------------------------------------------
+
+def _make_prometheus_executor(config) -> "Callable[[str], Awaitable[dict]] | None":
+    """Create a PromQL executor from config, or return None if AMP/Prometheus not configured."""
+    if not config.amp_workspace_id and not getattr(config, "prometheus_url", None):
+        return None
+
+    from k8s_scale_test.health_sweep import AMPMetricCollector
+
+    collector = AMPMetricCollector(
+        amp_workspace_id=config.amp_workspace_id,
+        prometheus_url=getattr(config, "prometheus_url", None),
+        aws_profile=getattr(config, "aws_profile", None),
+    )
+
+    async def executor(query: str) -> dict:
+        return await collector._query_promql(query)
+
+    return executor
+
+
+def _make_cloudwatch_executor(config, aws_client) -> "Callable[[str, str, str], Awaitable[dict]] | None":
+    """Create a CloudWatch Logs Insights executor, or return None if not configured."""
+    if not config.cloudwatch_log_group or not config.eks_cluster_name:
+        return None
+    if aws_client is None:
+        return None
+
+    async def executor(query: str, start_time: str, end_time: str) -> dict:
+        loop = asyncio.get_event_loop()
+        result = await loop.run_in_executor(
+            None, _run_cw_insights_query,
+            aws_client, config.cloudwatch_log_group, query, start_time, end_time,
+        )
+        return result
+
+    return executor
+
+
+def _run_cw_insights_query(
+    aws_client, log_group: str, query: str, start_time: str, end_time: str,
+) -> dict:
+    """Blocking CloudWatch Logs Insights query — runs inside ``run_in_executor``."""
+    import time
+    from datetime import datetime as _dt, timezone as _tz
+
+    cw = aws_client.client("logs")
+    start_epoch = int(_dt.fromisoformat(start_time).timestamp())
+    end_epoch = int(_dt.fromisoformat(end_time).timestamp())
+
+    resp = cw.start_query(
+        logGroupName=log_group,
+        startTime=start_epoch,
+        endTime=end_epoch,
+        queryString=query,
+    )
+    query_id = resp["queryId"]
+
+    # Poll until complete (max ~30s)
+    for _ in range(30):
+        result = cw.get_query_results(queryId=query_id)
+        if result["status"] in ("Complete", "Failed", "Cancelled"):
+            break
+        time.sleep(1)
+
+    return {
+        "status": result.get("status"),
+        "results": [
+            {field["field"]: field["value"] for field in row}
+            for row in result.get("results", [])
+        ],
+    }
 
 
 class _ObserverHandle:
@@ -80,6 +158,9 @@ class ScaleTestController:
         self._health_sweep: dict = {}
         self._karpenter_health: dict = {}
         self._ctx_writer: ContextFileWriter | None = None
+        self._scanner: ObservabilityScanner | None = None
+        self._scanner_task: asyncio.Task | None = None
+        self._scanner_findings: list[ScanResult] = []
 
     async def run(self) -> TestRunSummary:
         """Execute the full test lifecycle.
@@ -312,11 +393,34 @@ class ScaleTestController:
         # the monitor's deployment watch. Used for post-run cross-validation.
         observer_proc = await self._start_observer(run_id, namespaces)
 
+        # ── Phase 6a: Observability Scanner ────────────────────────────
+        # Create and start the proactive scanner if at least one backend
+        # (AMP/Prometheus or CloudWatch) is configured.
+        try:
+            prom_fn = _make_prometheus_executor(self.config)
+            cw_fn = _make_cloudwatch_executor(self.config, self.aws_client)
+            if prom_fn or cw_fn:
+                self._scanner = ObservabilityScanner(
+                    self.config, prometheus_fn=prom_fn, cloudwatch_fn=cw_fn,
+                )
+                self._scanner.on_finding(self._on_scanner_finding)
+                self._scanner_task = asyncio.create_task(self._scanner.run())
+                log.info("ObservabilityScanner started (prom=%s, cw=%s)",
+                         prom_fn is not None, cw_fn is not None)
+            else:
+                log.info("ObservabilityScanner skipped: no AMP/Prometheus or CloudWatch configured")
+        except Exception as exc:
+            log.warning("Failed to create ObservabilityScanner: %s", exc)
+            self._scanner = None
+            self._scanner_task = None
+
         # ── Phase 7: Stressor Scaling + Hold at Peak ──────────────────
         # Scale pods, hold at target count, run health sweep. All protected
         # by try/finally so monitor/watcher/observer ALWAYS get stopped
         # even if scaling or the sweep throws an exception.
         try:
+            if self._scanner:
+                self._scanner.set_phase(ScanPhase.SCALING)
             result = await self._execute_scaling_via_flux(
                 writer, targets, deployments, anomaly,
             )
@@ -337,6 +441,8 @@ class ScaleTestController:
             # All run concurrently during the hold period
             if self._ctx_writer:
                 self._ctx_writer.update_phase("hold-at-peak", datetime.now(timezone.utc))
+            if self._scanner:
+                self._scanner.set_phase(ScanPhase.HOLD_AT_PEAK)
             log.info("Holding at peak for %ds + running health checks...", hold)
             health_sweep_task = asyncio.create_task(sweep_agent.run(sample_size=10))
             hold_task = asyncio.create_task(asyncio.sleep(hold))
@@ -368,6 +474,14 @@ class ScaleTestController:
             await monitor.stop()
             await watcher.stop()
             self._stop_observer(observer_proc)
+            # Stop the observability scanner
+            if self._scanner:
+                try:
+                    await self._scanner.stop()
+                    if self._scanner_task:
+                        await self._scanner_task
+                except Exception as exc:
+                    log.warning("Scanner shutdown error: %s", exc)
 
         # Karpenter check runs after monitor stops — doesn't affect rate data
         self._karpenter_health = await infra_agent.check_if_needed(self._findings)
@@ -633,6 +747,12 @@ class ScaleTestController:
             elapsed = (datetime.now(timezone.utc) - start).total_seconds()
             elapsed_min = elapsed / 60
 
+            # Feed live data to the observability scanner
+            if self._scanner:
+                self._scanner.update_context(
+                    elapsed_minutes=elapsed_min, pending=pending, ready=ready,
+                )
+
             # Proactively refresh K8s token every 10 minutes during long scaling
             now = datetime.now(timezone.utc)
             if (now - last_token_refresh).total_seconds() >= 600:
@@ -836,6 +956,15 @@ class ScaleTestController:
             return response
         except (EOFError, KeyboardInterrupt):
             return "continue"
+
+    def _on_scanner_finding(self, result: ScanResult) -> None:
+        """Handle a scanner finding: log, persist, collect."""
+        log.warning("Scanner [%s] %s: %s", result.query_name, result.severity.value, result.title)
+        try:
+            self.evidence_store.save_scanner_finding(self._evidence_run_id, result)
+        except Exception as exc:
+            log.debug("Failed to persist scanner finding: %s", exc)
+        self._scanner_findings.append(result)
 
     async def _count_pods(self) -> tuple[int, int, int]:
         """Return ``(ready, pending, total)`` pod counts.
@@ -1071,6 +1200,16 @@ class ScaleTestController:
             result, self._findings, self.config.target_pods,
         )
         agent_findings = self.evidence_store.load_agent_findings(run_id) or None
+        scanner_findings = [
+            {
+                "query_name": r.query_name,
+                "severity": r.severity.value,
+                "title": r.title,
+                "detail": r.detail,
+                "source": r.source.value,
+            }
+            for r in self._scanner_findings
+        ] or None
         return TestRunSummary(
             run_id=run_id, start_time=start, end_time=end,
             duration_seconds=(end - start).total_seconds(),
@@ -1085,6 +1224,7 @@ class ScaleTestController:
             node_health_sweep=self._health_sweep or None,
             karpenter_health=self._karpenter_health or None,
             agent_findings=agent_findings,
+            scanner_findings=scanner_findings,
         )
 
     # ------------------------------------------------------------------

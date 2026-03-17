@@ -111,6 +111,18 @@ class EvidenceStore:
         """Save CL2 results as cl2_summary.json in the run directory."""
         self._write_json(self._run_dir(run_id) / "cl2_summary.json", summary.to_dict())
 
+    def save_scanner_finding(self, run_id: str, result) -> None:
+        """Append a scanner finding to scanner_findings.jsonl."""
+        entry = {
+            "query_name": result.query_name,
+            "severity": result.severity.value,
+            "title": result.title,
+            "detail": result.detail,
+            "source": result.source.value,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+        self._append_jsonl(self._run_dir(run_id) / "scanner_findings.jsonl", entry)
+
     def write_agent_context(self, run_id: str, context: dict) -> None:
         """Write agent_context.json to the run directory."""
         self._write_json(self._run_dir(run_id) / "agent_context.json", context)

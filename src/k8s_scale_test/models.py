@@ -443,6 +443,7 @@ class TestRunSummary(_SerializableMixin):
     node_health_sweep: Optional[Dict] = None
     karpenter_health: Optional[Dict] = None
     agent_findings: Optional[List[Dict]] = None
+    scanner_findings: Optional[List[Dict]] = None
 
 
 # ---------------------------------------------------------------------------
