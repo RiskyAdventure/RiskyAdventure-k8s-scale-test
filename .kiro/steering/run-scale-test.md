@@ -18,12 +18,14 @@ When the user asks to run a scale test, follow this runbook exactly. Do not crea
 
 ## How to Launch
 
-The scale test is a Python CLI at `src/k8s_scale_test`. It runs as a long-running background process.
+The scale test is a Python CLI at `src/k8s_scale_test`. It runs as a long-running process (30-45 min for 30K pods).
+
+Launch it using Kiro's `controlBashProcess` tool so output is captured in the process buffer and can be read anytime with `getProcessOutput`. Run from the **repo root** (not `src/`) to avoid cwd confusion with relative paths.
 
 ### Command Template
 
 ```bash
-nohup python3 -m k8s_scale_test \
+python3 -u -m k8s_scale_test \
   --target-pods <TARGET> \
   --auto-approve \
   --aws-profile "shancor+test-Admin" \
@@ -39,11 +41,12 @@ nohup python3 -m k8s_scale_test \
   --cpu-limit-multiplier 2.0 \
   --memory-limit-multiplier 1.5 \
   --iperf3-server-ratio 50 \
-  -v > scale-test-<TARGET_SHORT>.log 2>&1 &
-echo "PID: $!"
+  -v
 ```
 
-Replace `<TARGET>` with the pod count (e.g., 30000) and `<TARGET_SHORT>` with a short label (e.g., `30k`).
+Use `controlBashProcess` with `cwd: "src"` to start it. The `-u` flag disables Python output buffering so `getProcessOutput` shows real-time progress.
+
+Replace `<TARGET>` with the pod count (e.g., 30000).
 
 ### Default Target
 
@@ -58,7 +61,7 @@ If the user says "run a scale test" without specifying a pod count, ask them wha
 
 ## Monitoring the Run
 
-After launching, monitor the log file with `tail -50 scale-test-<TARGET_SHORT>.log` every 30-60 seconds. Watch for:
+After launching, use `getProcessOutput` to check progress. Watch for:
 
 - Preflight GO/NO_GO decision
 - Infrastructure pod scaling (iperf3 servers)
