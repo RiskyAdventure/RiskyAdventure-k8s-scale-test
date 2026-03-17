@@ -333,11 +333,10 @@ class TestSSMCallBudget:
         assert set(keys[:5]) == base_keys, f"Base commands changed: {set(keys[:5])}"
 
     def test_health_sweep_uses_single_command(self):
-        """The hold-at-peak sweep must use run_single_command (1 SSM call per node)."""
-        from k8s_scale_test.health_sweep import HealthSweepAgent
-        source = inspect.getsource(HealthSweepAgent.run)
-        assert "run_single_command" in source, "Sweep should use single SSM command"
-        assert ".collect(" not in source, "Sweep must NOT use full collect()"
+        """The SSM fallback sweep must use run_single_command (1 SSM call per node)."""
+        from k8s_scale_test.health_sweep import SSMFallbackCollector
+        source = inspect.getsource(SSMFallbackCollector.collect)
+        assert "run_single_command" in source, "SSM fallback should use single SSM command"
 
     def test_health_sweep_is_separate_module(self):
         """Health sweep must be in its own module, not in controller."""
@@ -373,7 +372,7 @@ class TestSweepOutputParser:
             "===PSI_SEP===\n"
             "some avg10=0.25 avg60=0.10 avg300=0.05 total=2\n"
             "===KUBELET_START===\n"
-            "ok===HEALTH_SEP===active\n"
+            "active\n"
             "===DISK_START===\n"
             "/dev/nvme0n1p1  100G  20G  80G  20%  /\n"
             "===MPSTAT_START===\n"
@@ -390,7 +389,7 @@ class TestSweepOutputParser:
             "some avg10=1.00 avg60=0.50 avg300=0.25 total=10\n"
             "===PSI_SEP===\n"
             "some avg10=0.25 avg60=0.10 avg300=0.05 total=2\n"
-            "===KUBELET_START===\nok===HEALTH_SEP===active\n"
+            "===KUBELET_START===\nactive\n"
             "===DISK_START===\n/dev/x  100G  20G  80G  20%  /\n"
             "===MPSTAT_START===\nNO_MPSTAT\n"
         )
@@ -404,12 +403,12 @@ class TestSweepOutputParser:
             "===PSI_START===\nsome avg10=0.5 avg60=0.2 avg300=0.1 total=5\n"
             "===PSI_SEP===\nsome avg10=1.0 avg60=0.5 avg300=0.2 total=10\n"
             "===PSI_SEP===\nsome avg10=0.2 avg60=0.1 avg300=0.0 total=2\n"
-            "===KUBELET_START===\nerror: connection refused===HEALTH_SEP===active\n"
+            "===KUBELET_START===\ninactive\n"
             "===DISK_START===\n/dev/x  100G  20G  80G  20%  /\n"
             "===MPSTAT_START===\nNO_MPSTAT\n"
         )
         issues = parse_sweep_output("node-1", output)
-        assert any("healthz failed" in i for i in issues)
+        assert any("Kubelet not active" in i for i in issues)
 
     def test_empty_output(self):
         from k8s_scale_test.health_sweep import parse_sweep_output

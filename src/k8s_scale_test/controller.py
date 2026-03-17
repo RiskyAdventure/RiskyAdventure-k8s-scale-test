@@ -222,7 +222,7 @@ class ScaleTestController:
             self.evidence_store, run_id, self._prompt_operator,
             aws_client=self.aws_client,
         )
-        sweep_agent = HealthSweepAgent(self.k8s_client, node_diag, self.evidence_store, run_id)
+        sweep_agent = HealthSweepAgent(self.config, self.k8s_client, node_diag, self.evidence_store, run_id)
         infra_agent = InfraHealthAgent(self.k8s_client)
         monitor.on_alert(anomaly.handle_alert)
         watcher = EventWatcher(self.k8s_client, namespaces, self.evidence_store)
