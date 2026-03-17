@@ -187,11 +187,12 @@ class AMPMetricCollector:
 
         # Lazily resolved SigV4 credentials (only when AMP is used)
         self._credentials = None
+        self._botocore_session = None
         if self._use_sigv4:
             import botocore.session
 
-            session = botocore.session.Session(profile=aws_profile)
-            self._credentials = session.get_credentials()
+            self._botocore_session = botocore.session.Session(profile=aws_profile)
+            self._credentials = self._botocore_session.get_credentials()
 
     # ------------------------------------------------------------------
     # Public API
@@ -253,12 +254,20 @@ class AMPMetricCollector:
         return json.loads(response_body)
 
     def _sign_request(self, req: urllib.request.Request, url: str) -> None:
-        """Apply SigV4 signature headers to *req*."""
+        """Apply SigV4 signature headers to *req*.
+
+        Re-resolves credentials each call so that refreshable credentials
+        (e.g. SSO, STS assume-role) are always current.
+        """
         from botocore.auth import SigV4Auth
         from botocore.awsrequest import AWSRequest
 
+        # Re-resolve credentials to pick up refreshed tokens
+        creds = self._botocore_session.get_credentials() if self._botocore_session else self._credentials
+        resolved = creds.get_frozen_credentials() if hasattr(creds, 'get_frozen_credentials') else creds
+
         aws_req = AWSRequest(method="GET", url=url, headers={"Accept": "application/json"})
-        SigV4Auth(self._credentials, "aps", self._region).add_auth(aws_req)
+        SigV4Auth(resolved, "aps", self._region).add_auth(aws_req)
 
         for header, value in aws_req.headers.items():
             req.add_header(header, value)

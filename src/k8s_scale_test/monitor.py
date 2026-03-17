@@ -24,6 +24,8 @@ class PodRateMonitor:
         self._lock = threading.Lock()
         self._ready = self._pending = self._total = self._node_count = 0
         self._alert_in_flight, self._ns_counts = False, {}
+        self._token_refresh_lock = threading.Lock()
+        self._last_token_refresh = 0.0  # monotonic timestamp
 
     async def start(self):
         self._running = True
@@ -48,6 +50,32 @@ class PodRateMonitor:
     def get_node_count(self):
         with self._lock: return self._node_count
     def on_alert(self, cb): self._alert_callbacks.append(cb)
+
+    def _is_auth_error(self, exc: Exception) -> bool:
+        """Detect K8s API auth failures that need a token refresh."""
+        s = str(exc)
+        return any(x in s for x in ("Unauthorized", "401", "ExpiredToken")) or type(exc).__name__ == "AttributeError"
+
+    def _try_refresh_token(self) -> bool:
+        """Refresh the K8s token if it hasn't been refreshed recently.
+
+        Multiple watch threads may hit auth errors simultaneously.
+        The lock + cooldown ensures we only refresh once per 30s window.
+        Returns True if a refresh was performed.
+        """
+        now = _time.monotonic()
+        with self._token_refresh_lock:
+            if now - self._last_token_refresh < 30.0:
+                return False  # another thread already refreshed recently
+            if hasattr(self.config, '_k8s_reload'):
+                try:
+                    self.config._k8s_reload()
+                    self._last_token_refresh = _time.monotonic()
+                    log.info("Monitor: K8s token refreshed")
+                    return True
+                except Exception as e:
+                    log.warning("Monitor: token refresh failed: %s", e)
+            return False
 
     async def _safe_callback(self, cb, alert):
         """Run alert callback in a separate thread so it never blocks the ticker.
@@ -104,6 +132,9 @@ class PodRateMonitor:
             except Exception as e:
                 if not self._running: return
                 if "410" in str(e) or "Gone" in str(e): rv = None
+                if self._is_auth_error(e):
+                    self._try_refresh_token()
+                    api = self.k8s_client.AppsV1Api()  # re-create after refresh
                 log.debug("Deploy watch reconnect %s: %s", ns, type(e).__name__)
                 try:
                     ds = api.list_namespaced_deployment(ns, watch=False, _request_timeout=10)
@@ -117,9 +148,9 @@ class PodRateMonitor:
         from kubernetes import watch as kw
         v1 = self.k8s_client.CoreV1Api(); w = kw.Watch(); rv = None
         try:
-            ns = v1.list_node(watch=False)
-            with self._lock: self._node_count = len(ns.items)
-            if ns.metadata and ns.metadata.resource_version: rv = ns.metadata.resource_version
+            nl = v1.list_node(watch=False)
+            with self._lock: self._node_count = len(nl.items)
+            if nl.metadata and nl.metadata.resource_version: rv = nl.metadata.resource_version
         except Exception: pass
         while self._running:
             try:
@@ -137,11 +168,14 @@ class PodRateMonitor:
             except Exception as e:
                 if not self._running: return
                 if "410" in str(e) or "Gone" in str(e): rv = None
+                if self._is_auth_error(e):
+                    self._try_refresh_token()
+                    v1 = self.k8s_client.CoreV1Api()  # re-create after refresh
                 log.debug("Node watch reconnect: %s", type(e).__name__)
                 try:
-                    ns = v1.list_node(watch=False)
-                    with self._lock: self._node_count = len(ns.items)
-                    if ns.metadata and ns.metadata.resource_version: rv = ns.metadata.resource_version
+                    nl = v1.list_node(watch=False)
+                    with self._lock: self._node_count = len(nl.items)
+                    if nl.metadata and nl.metadata.resource_version: rv = nl.metadata.resource_version
                 except Exception: pass
                 _time.sleep(2)
 

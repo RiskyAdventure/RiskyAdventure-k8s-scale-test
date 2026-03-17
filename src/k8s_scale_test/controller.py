@@ -512,6 +512,7 @@ class ScaleTestController:
         # Monitor until target reached or timeout
         start = datetime.now(timezone.utc)
         last_log_time = start
+        last_token_refresh = start
         diag_done = False
         peak_rate = 0.0
 
@@ -520,6 +521,12 @@ class ScaleTestController:
             ready, pending, total = await self._count_pods()
             elapsed = (datetime.now(timezone.utc) - start).total_seconds()
             elapsed_min = elapsed / 60
+
+            # Proactively refresh K8s token every 10 minutes during long scaling
+            now = datetime.now(timezone.utc)
+            if (now - last_token_refresh).total_seconds() >= 600:
+                self._refresh_k8s_token()
+                last_token_refresh = now
 
             # Track peak rate from the monitor
             if self._monitor:
