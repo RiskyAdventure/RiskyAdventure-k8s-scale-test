@@ -162,6 +162,11 @@ class TestConfig(_SerializableMixin):
     amp_workspace_id: Optional[str] = None
     cloudwatch_log_group: Optional[str] = None
     eks_cluster_name: Optional[str] = None
+    kb_table_name: str = "scale-test-kb"
+    kb_s3_bucket: Optional[str] = None
+    kb_s3_prefix: str = "kb-entries/"
+    kb_match_threshold: float = 0.7
+    kb_auto_ingest: bool = True
 
 
 # ---------------------------------------------------------------------------
@@ -603,3 +608,42 @@ class HelmReleaseConfig(_SerializableMixin):
     namespace: str
     chart: str
     source_path: str
+
+
+# ---------------------------------------------------------------------------
+# Known Issues KB Models
+# ---------------------------------------------------------------------------
+
+@dataclass
+class Signature(_SerializableMixin):
+    event_reasons: List[str]
+    log_patterns: List[str]
+    metric_conditions: List[str]
+    resource_kinds: List[str]
+
+
+@dataclass
+class AffectedVersions(_SerializableMixin):
+    component: str
+    min_version: Optional[str] = None
+    max_version: Optional[str] = None
+    fixed_in: Optional[str] = None
+
+
+@dataclass
+class KBEntry(_SerializableMixin):
+    entry_id: str
+    title: str
+    category: str
+    signature: Signature
+    root_cause: str
+    recommended_actions: List[str]
+    severity: Severity
+    affected_versions: List[AffectedVersions]
+    created_at: datetime
+    last_seen: datetime
+    occurrence_count: int
+    status: str = "active"
+    review_notes: Optional[str] = None
+    alternative_explanations: List[str] = field(default_factory=list)
+    checkpoint_questions: List[str] = field(default_factory=list)

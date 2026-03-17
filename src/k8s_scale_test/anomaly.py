@@ -13,6 +13,8 @@ from typing import Callable, Awaitable, Optional
 
 from k8s_scale_test.diagnostics import NodeDiagnosticsCollector
 from k8s_scale_test.evidence import EvidenceStore
+from k8s_scale_test.kb_matcher import SignatureMatcher
+from k8s_scale_test.kb_store import KBStore
 from k8s_scale_test.metrics import NodeMetricsAnalyzer
 from k8s_scale_test.models import (
     Alert, Finding, K8sEvent, NodeDiagnostic, NodeMetric,
@@ -30,6 +32,8 @@ class AnomalyDetector:
         evidence_store: EvidenceStore, run_id: str,
         operator_cb: Optional[Callable[[str, dict], Awaitable[str]]] = None,
         aws_client=None,
+        kb_store: Optional[KBStore] = None,
+        kb_matcher: Optional[SignatureMatcher] = None,
     ) -> None:
         self.config = config
         self.k8s_client = k8s_client
@@ -39,6 +43,8 @@ class AnomalyDetector:
         self.run_id = run_id
         self._operator_cb = operator_cb
         self.aws_client = aws_client
+        self.kb_store = kb_store
+        self.kb_matcher = kb_matcher or SignatureMatcher(threshold=config.kb_match_threshold)
         self._node_cache: dict[str, str] = {}  # node_name -> instance_id
 
     async def handle_alert(self, alert: Alert) -> Finding:
@@ -53,6 +59,30 @@ class AnomalyDetector:
         if warning_reasons:
             log.info("  Events: %s", ", ".join(f"{r}={c}" for r, c in
                      sorted(warning_reasons.items(), key=lambda x: -x[1])[:5]))
+
+        # KB lookup — check known patterns before full investigation
+        if self.kb_store is not None:
+            matches = self.kb_matcher.match(events, [], self.kb_store.load_all())
+            if matches:
+                best_entry, best_score = matches[0]
+                log.info("  KB match: %s (score=%.2f)", best_entry.entry_id, best_score)
+                now = datetime.now(timezone.utc)
+                finding = Finding(
+                    finding_id=str(uuid.uuid4()),
+                    timestamp=now,
+                    severity=best_entry.severity,
+                    symptom=alert.message,
+                    affected_resources=[],
+                    k8s_events=events,
+                    node_metrics=[],
+                    node_diagnostics=[],
+                    evidence_references=[f"kb_match:{best_entry.entry_id}"],
+                    root_cause=best_entry.root_cause,
+                    resolved=True,
+                )
+                self.kb_store.update_occurrence(best_entry.entry_id, now)
+                self.evidence_store.save_finding(self.run_id, finding)
+                return finding
 
         # Layer 2: Pod phase breakdown — distinguish Pending vs ContainerCreating
         phase_breakdown = await self._get_pod_phase_breakdown(ns_list)

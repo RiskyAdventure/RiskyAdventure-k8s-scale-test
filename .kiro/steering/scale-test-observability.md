@@ -6,6 +6,68 @@ inclusion: auto
 
 You are an AI sub-agent assisting with EKS scale test observability analysis. This guide provides domain knowledge for investigating fleet-wide issues during scale tests using AMP (Amazon Managed Prometheus), CloudWatch Logs, and EKS MCP tools.
 
+## 0. Known Issues Knowledge Base — Query First
+
+Before performing any manual investigation, **query the Known Issues KB**. The KB contains structured entries for known EKS scale test failure patterns with signatures, root causes, and recommended actions. Matching against the KB avoids redundant investigation of previously seen issues.
+
+### How to Query the KB
+
+**From the CLI:**
+```bash
+# List all known entries
+k8s-scale-test kb list
+
+# Search by keyword (case-insensitive match on title and root cause)
+k8s-scale-test kb search "MAC collision"
+k8s-scale-test kb search "IPAMD"
+
+# Show full details for a specific entry
+k8s-scale-test kb show ipamd-mac-collision
+```
+
+**Programmatically (during anomaly detection):**
+```python
+from k8s_scale_test.kb_store import KBStore
+from k8s_scale_test.kb_matcher import SignatureMatcher
+
+# KBStore is pre-loaded at controller startup with active entries in memory
+entries = kb_store.load_all()          # zero-latency, from local cache
+matcher = SignatureMatcher()
+matches = matcher.match(finding_events, finding_diagnostics, entries)
+
+if matches:
+    best_entry, score = matches[0]
+    # Use best_entry.root_cause and best_entry.recommended_actions
+```
+
+### Seed Entries in the KB
+
+The KB ships with 12 seed entries covering the most common scale test failure patterns. These were migrated from this steering file's former inline pattern descriptions:
+
+| entry_id | category | summary |
+|---|---|---|
+| `ipamd-mac-collision` | networking | VPC CNI MAC address collision at high pod density |
+| `ipamd-ip-exhaustion` | networking | IPAMD IP/prefix allocation failures |
+| `subnet-ip-exhaustion` | networking | Subnet-level IP exhaustion blocking ENI attachment |
+| `coredns-bottleneck` | networking | CoreDNS overload causing DNS resolution failures |
+| `karpenter-capacity` | capacity | Karpenter InsufficientCapacityError during scaling |
+| `image-pull-throttle` | runtime | Container image pull QPS throttling |
+| `oom-kill` | runtime | OOM kills and pod evictions from memory pressure |
+| `disk-pressure` | storage | Node disk pressure causing pod evictions |
+| `ec2-api-throttle` | networking | EC2 API rate limiting affecting VPC CNI operations |
+| `nvme-disk-init` | storage | NVMe disk initialization failures on i4i instances |
+| `kyverno-webhook-failure` | control-plane | Kyverno admission webhook blocking pod creation |
+| `systemd-cgroup-timeout` | runtime | systemd cgroup setup timeouts during container creation |
+
+Run `k8s-scale-test kb show <entry_id>` for full signature details, root cause, recommended actions, and affected versions.
+
+### Investigation Workflow
+
+1. Collect K8s events from the affected time window
+2. Query the KB for matches against those events (`kb search` or `SignatureMatcher.match()`)
+3. If a match is found with score > 0.7, use the KB entry's root cause and recommended actions — skip SSM/EC2 evidence collection
+4. If no match is found, proceed with the full investigation pipeline described in the sections below
+
 ## 1. EKS Scale Test Context
 
 ### What the Test Does
@@ -48,30 +110,11 @@ At scale, three main metric exporters feed AMP:
 
 When scanning AMP, reason about patterns rather than checking fixed thresholds. What matters is the trend relative to the test phase:
 
-**CPU pressure signals:**
-- Node CPU utilization climbing steadily during scaling — normal if gradual, concerning if it spikes on specific nodes or availability zones
-- System CPU (kernel time) disproportionately high compared to user CPU — suggests kernel-level contention (network stack, cgroup operations)
-- CPU throttling on system-critical pods (kube-proxy, aws-node, coredns) — these can cascade into broader failures
-
-**Memory pressure signals:**
-- Available memory dropping across many nodes simultaneously — could indicate a workload memory issue or a system component leak
-- IPAMD (aws-node) memory growing without bound — known issue at high pod density, the VPC CNI plugin can leak memory when allocating/deallocating many IPs rapidly
-- OOM kills appearing in node metrics — check which processes are being killed (workload vs system)
-
-**Network signals:**
-- IP allocation failures or delays — the VPC CNI needs to attach ENIs and allocate IPs; at scale this can hit EC2 API rate limits or subnet exhaustion
-- DNS resolution latency spikes — CoreDNS can become a bottleneck when thousands of pods start simultaneously
-- Network error counters rising on specific nodes — could indicate ENI attachment issues or security group evaluation delays
-
-**Disk I/O signals:**
-- Disk utilization climbing on nodes — container image pulls at scale can saturate disk I/O
-- inode exhaustion — many small containers can exhaust inodes before disk space runs out
-- Slow disk operations correlating with pod startup delays
-
-**Pod lifecycle signals:**
-- Pod restart counts increasing — indicates containers are crash-looping
-- Pods stuck in Pending state — scheduling failures, resource constraints, or node pressure
-- Container creation time increasing — suggests containerd or image pull bottlenecks
+- **CPU pressure** — Steady climb during scaling is normal; spikes on specific nodes or AZs are not. Watch for disproportionate system CPU (kernel time) and throttling on system-critical pods (kube-proxy, aws-node, coredns).
+- **Memory pressure** — Fleet-wide drops in available memory, unbounded growth in system component memory, and OOM kills. Query the KB for `oom-kill` and `ipamd-ip-exhaustion` entries for known patterns.
+- **Network signals** — IP allocation failures, DNS resolution latency spikes, network error counters. The KB covers the most common networking patterns — run `k8s-scale-test kb list` filtered by category `networking`.
+- **Disk I/O** — Disk utilization climbing from image pulls, inode exhaustion, slow disk operations. See KB entries `disk-pressure` and `nvme-disk-init`.
+- **Pod lifecycle** — Restart counts, pods stuck in Pending, increasing container creation time. Cross-reference with KB entries for the specific event reasons observed.
 
 ### Anomalous Patterns at Scale
 
@@ -91,47 +134,31 @@ During EKS scale tests, the most informative CloudWatch log streams come from no
 
 Key log sources to investigate:
 
-- **kubelet** — The primary node agent. Logs pod lifecycle events, image pulls, volume mounts, and eviction decisions. During scale tests, look for pod sandbox creation failures, image pull backoff, and eviction warnings.
-- **containerd** — The container runtime. Logs container creation, start, and stop events. At scale, look for slow container creation, snapshot errors, and resource exhaustion messages.
-- **IPAMD (aws-node)** — The VPC CNI plugin's IP address management daemon. Logs IP allocation, ENI attachment, and warm pool management. This is often the first component to show stress during scale tests because every new pod needs an IP.
-- **kube-proxy** — Manages iptables/IPVS rules for service routing. At high pod counts, rule updates can become slow and log warnings about sync duration.
+- **kubelet** — Pod lifecycle events, image pulls, volume mounts, eviction decisions.
+- **containerd** — Container creation, start, stop events. Snapshot errors and resource exhaustion.
+- **IPAMD (aws-node)** — IP allocation, ENI attachment, warm pool management.
+- **kube-proxy** — iptables/IPVS rule updates and sync duration.
 
-### Common Error Patterns
+### Querying for Known Patterns
 
-When querying CloudWatch Logs, look for these patterns correlated with the alert timestamp (use a window of ±2-3 minutes around the alert):
+Rather than manually scanning for error strings, query the KB first. Each KB entry contains `log_patterns` (regex patterns) in its signature that match the relevant log lines. For example:
 
-**IPAMD / VPC CNI errors:**
-- "failed to allocate IP" or "no available IP addresses" — subnet exhaustion or ENI limits reached
-- "failed to attach ENI" — EC2 API throttling or ENI limit per instance type
-- "warm pool" warnings — the CNI's IP warm pool is depleted faster than it can refill
-- "ipamd" with "error" or "timeout" — general IPAMD health issues
+```bash
+# Find KB entries relevant to a specific log message
+k8s-scale-test kb search "failed to allocate IP"
+k8s-scale-test kb search "FailedCreatePodSandBox"
+```
 
-**kubelet errors:**
-- "FailedCreatePodSandBox" — pod networking setup failed, often tied to IPAMD issues
-- "FailedScheduling" — scheduler couldn't place the pod (resource constraints, affinity rules, taints)
-- "Evicted" or "eviction" — node is under resource pressure and evicting pods
-- "OOMKilled" — a container exceeded its memory limit
-- "ImagePullBackOff" or "ErrImagePull" — container image pull failures, often due to registry throttling at scale
-- "NodeNotReady" — the node is reporting unhealthy, which blocks all pod scheduling on it
+If the KB returns a match, use the entry's root cause and recommended actions directly.
 
-**containerd errors:**
-- "failed to create containerd task" — runtime-level failure creating the container
-- "context deadline exceeded" — operations timing out under load
-- "snapshot" errors — filesystem layer issues during image unpacking
+### Query Strategy for Unknown Patterns
 
-**General patterns:**
-- Correlate error timestamps with the rate drop alert timestamp from the context file
-- Look for error bursts (many errors in a short window) rather than isolated errors
-- Check if errors are concentrated on specific nodes or spread across the fleet
-- Filter by node hostname when you've identified affected nodes from AMP metrics
-
-### Query Strategy
-
-When using CloudWatch Logs Insights:
+When the KB has no match and you need to investigate manually:
 - Start with a broad time window around the alert, then narrow down
 - Filter for error-level messages first, then expand to warnings if needed
-- Use the affected node hostnames from AMP analysis to filter log streams
+- Use affected node hostnames from AMP analysis to filter log streams
 - Look for the first occurrence of an error pattern — that's often closer to the root cause than the flood of subsequent errors
+- Correlate error timestamps with the rate drop alert timestamp from the context file
 
 ## 4. EKS Cluster Context
 
@@ -246,13 +273,15 @@ Use this format for finding IDs:
 
 The most valuable findings come from correlating signals across AMP, CloudWatch Logs, and EKS state. Here's how to approach it:
 
-1. **Start with the broadest signal.** If you're doing a proactive scan, start with AMP fleet-wide metrics to identify which nodes or components are under stress. If you're investigating an alert, start with the alert details (timestamp, rate, affected counts).
+1. **Query the KB first.** Before any manual investigation, check if the K8s events or log patterns match a known KB entry. This can resolve the issue instantly.
 
-2. **Narrow to affected resources.** Once you identify affected nodes from AMP metrics, use those node hostnames to filter CloudWatch Logs. Look for error patterns on those specific nodes around the same time window.
+2. **Start with the broadest signal.** If the KB has no match and you're doing a proactive scan, start with AMP fleet-wide metrics to identify which nodes or components are under stress. If you're investigating an alert, start with the alert details (timestamp, rate, affected counts).
 
-3. **Check cluster-level context.** Use EKS MCP tools to see if the issue is reflected in Kubernetes events, node conditions, or addon status. Sometimes the K8s event stream has the most direct explanation.
+3. **Narrow to affected resources.** Once you identify affected nodes from AMP metrics, use those node hostnames to filter CloudWatch Logs. Look for error patterns on those specific nodes around the same time window.
 
-4. **Follow the evidence dynamically.** Don't follow a fixed checklist. If AMP shows memory pressure, check CloudWatch for OOM kills. If CloudWatch shows IPAMD errors, check AMP for IP allocation metrics. Let each finding guide your next query.
+4. **Check cluster-level context.** Use EKS MCP tools to see if the issue is reflected in Kubernetes events, node conditions, or addon status. Sometimes the K8s event stream has the most direct explanation.
+
+5. **Follow the evidence dynamically.** Don't follow a fixed checklist. If AMP shows memory pressure, check CloudWatch for OOM kills. If CloudWatch shows IPAMD errors, check AMP for IP allocation metrics. Let each finding guide your next query.
 
 ### Time Window Alignment
 
@@ -266,12 +295,14 @@ When correlating across sources, align your time windows carefully:
 
 Focus on issues most likely to cause pod ready rate drops. In rough priority order:
 
-1. **IP allocation failures** — Pods can't start without IPs. IPAMD issues are the #1 cause of rate drops at scale.
-2. **Node provisioning delays** — If Karpenter or Cluster Autoscaler can't add nodes fast enough, pods queue up in Pending.
-3. **Scheduler bottlenecks** — At very high pod counts, the scheduler itself can become a bottleneck.
-4. **Container runtime issues** — containerd failures or image pull throttling slow pod startup.
-5. **Memory/CPU pressure** — Resource exhaustion leads to evictions and scheduling failures.
-6. **Control plane throttling** — API server rate limiting can slow everything down.
+1. IP allocation failures
+2. Node provisioning delays
+3. Scheduler bottlenecks
+4. Container runtime issues
+5. Memory/CPU pressure
+6. Control plane throttling
+
+For detailed root causes and recommended actions for each category, query the KB: `k8s-scale-test kb list` or `k8s-scale-test kb search "<category>"`.
 
 ### When to Escalate Severity
 
@@ -323,7 +354,7 @@ For every finding, ask:
 - What else could cause these symptoms?
 - Is there a simpler explanation that the investigation overlooked?
 - Could the observed effect be a symptom of a different root cause?
-- Are there known issues (IPAMD memory leaks, CoreDNS scaling limits, ENI attachment delays) that match the pattern?
+- Does the KB contain a known pattern that matches these symptoms? Run `k8s-scale-test kb search` with relevant keywords.
 - Could the issue be environmental (AZ-specific, instance-type-specific) rather than systemic?
 
 Check the source code and documentation in the repository for context the investigation agent might not have considered. The codebase may contain known limitations, workarounds, or configuration details that explain the observed behavior.
@@ -333,26 +364,17 @@ Check the source code and documentation in the repository for context the invest
 When confidence is medium or low, write checkpoint questions that:
 - Are specific and actionable (not vague "should we investigate more?")
 - Point the operator toward the information gap that would resolve the ambiguity
-- Suggest a concrete next step ("Check if these nodes are running VPC CNI v1.12 which has the known IPAMD leak")
+- Suggest a concrete next step (e.g., "Run `k8s-scale-test kb show ipamd-mac-collision` to check if this matches the known VPC CNI MAC collision pattern")
 - Highlight where the investigation's reasoning might have gone wrong
-
-Good checkpoint questions:
-- "The finding blames memory pressure, but 4 nodes also show CPU core saturation. Should we investigate CPU contention as the primary cause?"
-- "Are these nodes running the VPC CNI version with the known IPAMD memory leak at high pod density?"
-- "The investigation found errors on 3 nodes, but the rate drop affected 350 pods. Are there additional affected nodes not captured in this finding?"
-
-Bad checkpoint questions:
-- "Is this finding correct?" (too vague)
-- "Should we look at more data?" (not actionable)
-- "Are there other issues?" (not specific)
 
 ### Review Workflow
 
 1. Read the finding completely before starting verification
 2. Identify the central claim and the evidence chain supporting it
-3. Run at least one independent MCP query to verify the central claim
-4. Assess whether the evidence actually supports the conclusion (vs. just being correlated)
-5. Consider alternative explanations based on domain knowledge
-6. Assign confidence level with clear reasoning
-7. Write checkpoint questions if confidence is below high
-8. Append the `review` field to the finding JSON
+3. Query the KB for known patterns matching the finding's symptoms
+4. Run at least one independent MCP query to verify the central claim
+5. Assess whether the evidence actually supports the conclusion (vs. just being correlated)
+6. Consider alternative explanations based on domain knowledge and KB entries
+7. Assign confidence level with clear reasoning
+8. Write checkpoint questions if confidence is below high
+9. Append the `review` field to the finding JSON

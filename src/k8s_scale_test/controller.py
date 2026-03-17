@@ -18,6 +18,9 @@ from k8s_scale_test.events import EventWatcher
 from k8s_scale_test.flux import FluxRepoReader, FluxRepoWriter
 from k8s_scale_test.health_sweep import HealthSweepAgent
 from k8s_scale_test.infra_health import InfraHealthAgent
+from k8s_scale_test.kb_ingest import IngestionPipeline
+from k8s_scale_test.kb_matcher import SignatureMatcher
+from k8s_scale_test.kb_store import KBStore
 from k8s_scale_test.metrics import NodeMetricsAnalyzer
 from k8s_scale_test.models import (
     Alert,
@@ -217,10 +220,33 @@ class ScaleTestController:
         self._monitor = monitor
         node_metrics = NodeMetricsAnalyzer(self.config, self.k8s_client, self.config.prometheus_url)
         node_diag = NodeDiagnosticsCollector(self.config, self.aws_client, self.evidence_store, run_id)
+
+        # 5b. Initialize KB store and matcher if configured
+        kb_store: KBStore | None = None
+        kb_matcher: SignatureMatcher | None = None
+        if self.config.kb_s3_bucket:
+            log.info("Initializing Known Issues KB (table=%s, bucket=%s)",
+                     self.config.kb_table_name, self.config.kb_s3_bucket)
+            try:
+                kb_store = KBStore(
+                    self.aws_client,
+                    table_name=self.config.kb_table_name,
+                    s3_bucket=self.config.kb_s3_bucket,
+                    s3_prefix=self.config.kb_s3_prefix,
+                )
+                kb_matcher = SignatureMatcher(threshold=self.config.kb_match_threshold)
+                log.info("KB loaded %d active entries into cache", len(kb_store.load_all()))
+            except Exception as exc:
+                log.warning("KB initialization failed, proceeding without KB: %s", exc)
+                kb_store = None
+                kb_matcher = None
+
         anomaly = AnomalyDetector(
             self.config, self.k8s_client, node_metrics, node_diag,
             self.evidence_store, run_id, self._prompt_operator,
             aws_client=self.aws_client,
+            kb_store=kb_store,
+            kb_matcher=kb_matcher,
         )
         sweep_agent = HealthSweepAgent(self.config, self.k8s_client, node_diag, self.evidence_store, run_id)
         infra_agent = InfraHealthAgent(self.k8s_client)
@@ -328,6 +354,20 @@ class ScaleTestController:
         summary = self._make_summary(run_id, start, report, result)
         self.evidence_store.save_summary(run_id, summary)
         self._verify_run_data(run_id, result)
+
+        # 8c. Auto-ingest resolved findings into KB
+        if self.config.kb_auto_ingest and kb_store is not None:
+            try:
+                run_dir = str(self.evidence_store._run_dir(run_id))
+                log.info("KB auto-ingest: processing findings from %s", run_dir)
+                pipeline = IngestionPipeline(kb_store, kb_matcher or SignatureMatcher())
+                ingested = pipeline.ingest_run(run_dir, self.evidence_store)
+                if ingested:
+                    log.info("KB auto-ingest: created/updated %d entries", len(ingested))
+                else:
+                    log.info("KB auto-ingest: no new entries from this run")
+            except Exception as exc:
+                log.warning("KB auto-ingest failed: %s", exc)
 
         try:
             from k8s_scale_test.chart import generate_chart

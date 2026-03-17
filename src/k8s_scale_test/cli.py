@@ -6,18 +6,17 @@ import argparse
 import asyncio
 import json
 import logging
+import os
+import re
 import sys
+from datetime import datetime, timezone
+from pathlib import Path
 
-from k8s_scale_test.controller import ScaleTestController
-from k8s_scale_test.evidence import EvidenceStore
 from k8s_scale_test.models import TestConfig
 
 
-def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
-    p = argparse.ArgumentParser(
-        prog="k8s-scale-test",
-        description="Kubernetes performance and scale testing system",
-    )
+def _add_run_args(p: argparse.ArgumentParser) -> None:
+    """Add the scale-test run arguments to *p*."""
     p.add_argument("--target-pods", type=int, required=True, help="Target pod count")
     p.add_argument("--pending-timeout", type=float, default=600.0, help="Seconds before timeout")
     p.add_argument("--kubeconfig", type=str, default=None)
@@ -51,23 +50,111 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
                    help="CloudWatch log group for node logs")
     p.add_argument("--eks-cluster-name", type=str, default=None,
                    help="EKS cluster name for EKS MCP server")
-    return p.parse_args(argv)
+
+
+def _add_kb_subcommands(subparsers: argparse._SubParsersAction) -> None:
+    """Register the ``kb`` subcommand group."""
+    kb_parser = subparsers.add_parser("kb", help="Known Issues Knowledge Base commands")
+    kb_sub = kb_parser.add_subparsers(dest="kb_command")
+
+    # Shared optional args for all kb commands
+    for name, sp in [
+        ("setup", kb_sub.add_parser("setup", help="Create DynamoDB table and verify S3 bucket")),
+        ("list", kb_sub.add_parser("list", help="List all KB entries")),
+        ("search", kb_sub.add_parser("search", help="Search KB entries by text query")),
+        ("show", kb_sub.add_parser("show", help="Show full details of a KB entry")),
+        ("add", kb_sub.add_parser("add", help="Add a new KB entry")),
+        ("remove", kb_sub.add_parser("remove", help="Remove a KB entry")),
+        ("approve", kb_sub.add_parser("approve", help="Approve a pending KB entry")),
+        ("ingest", kb_sub.add_parser("ingest", help="Ingest findings from a run directory")),
+        ("seed", kb_sub.add_parser("seed", help="Populate KB with seed entries")),
+    ]:
+        sp.add_argument("--aws-profile", type=str, default=None, help="AWS profile name")
+        sp.add_argument("--kb-table", type=str, default="scale-test-kb", help="DynamoDB table name")
+        sp.add_argument("--kb-bucket", type=str, default=None, help="S3 bucket for KB entries")
+        sp.add_argument("--kb-prefix", type=str, default="kb-entries/", help="S3 key prefix")
+
+    # list-specific
+    list_p = kb_sub.choices["list"]
+    list_p.add_argument("--pending", action="store_true", help="Show only pending entries")
+
+    # search-specific
+    search_p = kb_sub.choices["search"]
+    search_p.add_argument("query", help="Text to search for in title and root cause")
+
+    # show-specific
+    show_p = kb_sub.choices["show"]
+    show_p.add_argument("entry_id", help="KB entry identifier")
+
+    # add-specific
+    add_p = kb_sub.choices["add"]
+    add_p.add_argument("--title", required=True, help="Entry title")
+    add_p.add_argument("--category", required=True,
+                       choices=["networking", "scheduling", "capacity", "runtime", "storage", "control-plane"],
+                       help="Entry category")
+    add_p.add_argument("--root-cause", required=True, help="Root cause description")
+    add_p.add_argument("--event-reasons", required=True, help="Comma-separated K8s event reasons")
+    add_p.add_argument("--log-patterns", type=str, default=None, help="Comma-separated log regex patterns")
+    add_p.add_argument("--severity", type=str, default="warning",
+                       choices=["info", "warning", "critical"], help="Severity level (default: warning)")
+    add_p.add_argument("--component", type=str, default=None, help="Affected component name")
+    add_p.add_argument("--min-version", type=str, default=None, help="Minimum affected version")
+    add_p.add_argument("--max-version", type=str, default=None, help="Maximum affected version")
+    add_p.add_argument("--fixed-in", type=str, default=None, help="Version where issue was fixed")
+
+    # remove-specific
+    remove_p = kb_sub.choices["remove"]
+    remove_p.add_argument("entry_id", help="KB entry identifier to remove")
+
+    # approve-specific
+    approve_p = kb_sub.choices["approve"]
+    approve_p.add_argument("entry_id", help="KB entry identifier to approve")
+
+    # ingest-specific
+    ingest_p = kb_sub.choices["ingest"]
+    ingest_p.add_argument("run_dir", help="Path to the run directory containing findings")
+
+    # seed has no extra args
+
+
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    p = argparse.ArgumentParser(
+        prog="k8s-scale-test",
+        description="Kubernetes performance and scale testing system",
+    )
+    subparsers = p.add_subparsers(dest="command")
+
+    # ``run`` subcommand — the original scale-test behaviour
+    run_parser = subparsers.add_parser("run", help="Run a scale test")
+    _add_run_args(run_parser)
+
+    # ``kb`` subcommand group
+    _add_kb_subcommands(subparsers)
+
+    # Backwards compat: if no subcommand given but --target-pods is present,
+    # treat as a ``run`` invocation (legacy mode).
+    if argv is None:
+        raw = sys.argv[1:]
+    else:
+        raw = list(argv)
+
+    if raw and raw[0] not in ("run", "kb", "-h", "--help"):
+        # Legacy invocation — prepend "run"
+        raw = ["run"] + raw
+
+    return p.parse_args(raw)
 
 
 def main(argv: list[str] | None = None) -> None:
     args = parse_args(argv)
 
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s %(levelname)-8s %(name)s: %(message)s",
-    )
-    if args.verbose:
-        logging.getLogger("k8s_scale_test").setLevel(logging.DEBUG)
-    # Keep boto3/botocore/urllib3 quiet
-    logging.getLogger("botocore").setLevel(logging.WARNING)
-    logging.getLogger("boto3").setLevel(logging.WARNING)
-    logging.getLogger("urllib3").setLevel(logging.WARNING)
-    logging.getLogger("kubernetes").setLevel(logging.WARNING)
+    if args.command == "kb":
+        _handle_kb(args)
+        return
+
+    # ``run`` command (or legacy invocation)
+
+    _setup_logging(getattr(args, "verbose", False))
 
     cl2_params = None
     if args.cl2_params:
@@ -105,6 +192,9 @@ def main(argv: list[str] | None = None) -> None:
         eks_cluster_name=args.eks_cluster_name,
     )
 
+    from k8s_scale_test.controller import ScaleTestController
+    from k8s_scale_test.evidence import EvidenceStore
+
     evidence_store = EvidenceStore(config.output_dir)
 
     # Initialize K8s client
@@ -116,8 +206,6 @@ def main(argv: list[str] | None = None) -> None:
             kubernetes.config.load_kube_config()
         k8s_client = kubernetes.client
 
-        # Patch the K8s config to auto-refresh tokens by reloading kubeconfig
-        # before each API call batch. Store the loader for the controller to use.
         config._k8s_reload = lambda: (
             kubernetes.config.load_kube_config(config_file=config.kubeconfig)
             if config.kubeconfig
@@ -127,31 +215,8 @@ def main(argv: list[str] | None = None) -> None:
         logging.error("Failed to initialize K8s client: %s", exc)
         sys.exit(1)
 
-    # Initialize AWS client — export credentials from AWS CLI session
-    # so boto3 can find them (aws login stores creds in SSO cache,
-    # not in a format boto3 resolves natively)
     try:
-        import boto3
-        import os
-        import subprocess
-
-        # Try to export credentials from the AWS CLI session
-        _export = subprocess.run(
-            ["aws", "configure", "export-credentials", "--format", "env"],
-            capture_output=True, text=True, timeout=10,
-        )
-        if _export.returncode == 0:
-            for line in _export.stdout.strip().splitlines():
-                line = line.replace("export ", "")
-                if "=" in line:
-                    k, v = line.split("=", 1)
-                    os.environ[k] = v
-
-        session_kwargs = {}
-        if config.aws_profile:
-            session_kwargs["profile_name"] = config.aws_profile
-        aws_session = boto3.Session(**session_kwargs)
-        aws_client = aws_session
+        aws_client = _make_aws_session(config.aws_profile)
     except Exception as exc:
         logging.error("Failed to initialize AWS client: %s", exc)
         sys.exit(1)
@@ -164,6 +229,333 @@ def main(argv: list[str] | None = None) -> None:
     except KeyboardInterrupt:
         print("\nTest interrupted by user. Partial results saved.")
         sys.exit(130)
+
+
+def _setup_logging(verbose: bool = False) -> None:
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)-8s %(name)s: %(message)s",
+    )
+    if verbose:
+        logging.getLogger("k8s_scale_test").setLevel(logging.DEBUG)
+    logging.getLogger("botocore").setLevel(logging.WARNING)
+    logging.getLogger("boto3").setLevel(logging.WARNING)
+    logging.getLogger("urllib3").setLevel(logging.WARNING)
+    logging.getLogger("kubernetes").setLevel(logging.WARNING)
+
+
+def _make_aws_session(profile: str | None = None):
+    """Create a boto3 session, exporting credentials from the AWS CLI if needed."""
+    import boto3
+    import subprocess
+
+    try:
+        _export = subprocess.run(
+            ["aws", "configure", "export-credentials", "--format", "env"],
+            capture_output=True, text=True, timeout=10,
+        )
+        if _export.returncode == 0:
+            for line in _export.stdout.strip().splitlines():
+                line = line.replace("export ", "")
+                if "=" in line:
+                    k, v = line.split("=", 1)
+                    os.environ[k] = v
+    except Exception:
+        pass
+
+    session_kwargs = {}
+    if profile:
+        session_kwargs["profile_name"] = profile
+    return boto3.Session(**session_kwargs)
+
+
+# ------------------------------------------------------------------
+# KB subcommand handlers
+# ------------------------------------------------------------------
+
+
+def _handle_kb(args: argparse.Namespace) -> None:
+    """Dispatch to the appropriate ``kb`` subcommand handler."""
+    _setup_logging()
+
+    cmd = getattr(args, "kb_command", None)
+    if cmd is None:
+        print("Usage: k8s-scale-test kb <command>")
+        print("Commands: setup, list, search, show, add, remove, approve, ingest, seed")
+        sys.exit(1)
+
+    handlers = {
+        "setup": _kb_setup,
+        "list": _kb_list,
+        "search": _kb_search,
+        "show": _kb_show,
+        "add": _kb_add,
+        "remove": _kb_remove,
+        "approve": _kb_approve,
+        "ingest": _kb_ingest,
+        "seed": _kb_seed,
+    }
+    handler = handlers.get(cmd)
+    if handler is None:
+        print(f"Unknown kb command: {cmd}")
+        sys.exit(1)
+    handler(args)
+
+
+def _make_kb_store(args: argparse.Namespace):
+    """Create a KBStore from CLI args (direct DynamoDB/S3, no local cache used)."""
+    from k8s_scale_test.kb_store import KBStore
+
+    aws_session = _make_aws_session(getattr(args, "aws_profile", None))
+    return KBStore(
+        aws_client=aws_session,
+        table_name=getattr(args, "kb_table", "scale-test-kb"),
+        s3_bucket=getattr(args, "kb_bucket", "") or "",
+        s3_prefix=getattr(args, "kb_prefix", "kb-entries/"),
+    )
+
+
+def _kb_setup(args: argparse.Namespace) -> None:
+    """``kb setup`` — create DynamoDB table and verify S3 bucket."""
+    from k8s_scale_test.kb_store import KBStore
+
+    aws_session = _make_aws_session(getattr(args, "aws_profile", None))
+    table_name = getattr(args, "kb_table", "scale-test-kb")
+    bucket = getattr(args, "kb_bucket", None)
+
+    KBStore.setup_table(aws_session, table_name)
+    print(f"DynamoDB table '{table_name}' is ready.")
+
+    if not bucket:
+        print("No S3 bucket specified (--kb-bucket). Skipping bucket verification.")
+        return
+
+    if not KBStore.verify_bucket(aws_session, bucket):
+        print(f"ERROR: S3 bucket '{bucket}' does not exist or versioning is not enabled.")
+        print("Please create the bucket manually with versioning enabled.")
+        sys.exit(1)
+
+    print(f"S3 bucket '{bucket}' verified (exists, versioning enabled).")
+
+
+def _kb_list(args: argparse.Namespace) -> None:
+    """``kb list`` — display all entries as a table."""
+    store = _make_kb_store(args)
+    entries = store.load_all_direct()
+
+    if getattr(args, "pending", False):
+        entries = [e for e in entries if e.status == "pending"]
+
+    if not entries:
+        print("No KB entries found.")
+        return
+
+    # Table header
+    fmt = "{:<30s} {:<45s} {:<15s} {:<10s} {:<10s} {:>6s}"
+    print(fmt.format("ID", "TITLE", "CATEGORY", "SEVERITY", "STATUS", "COUNT"))
+    print("-" * 120)
+    for e in sorted(entries, key=lambda x: x.entry_id):
+        sev = e.severity.value if hasattr(e.severity, "value") else str(e.severity)
+        title = e.title[:44] + "…" if len(e.title) > 45 else e.title
+        print(fmt.format(
+            e.entry_id[:30],
+            title,
+            e.category[:15],
+            sev[:10],
+            e.status[:10],
+            str(e.occurrence_count),
+        ))
+
+
+def _kb_search(args: argparse.Namespace) -> None:
+    """``kb search <query>`` — text search via direct DynamoDB scan + filter."""
+    store = _make_kb_store(args)
+    query = args.query.lower()
+    entries = store.load_all_direct()
+    results = [
+        e for e in entries
+        if query in e.title.lower() or query in e.root_cause.lower()
+    ]
+
+    if not results:
+        print(f"No entries matching '{args.query}'.")
+        return
+
+    fmt = "{:<30s} {:<45s} {:<15s} {:<10s} {:<10s}"
+    print(fmt.format("ID", "TITLE", "CATEGORY", "SEVERITY", "STATUS"))
+    print("-" * 112)
+    for e in results:
+        sev = e.severity.value if hasattr(e.severity, "value") else str(e.severity)
+        title = e.title[:44] + "…" if len(e.title) > 45 else e.title
+        print(fmt.format(e.entry_id[:30], title, e.category[:15], sev[:10], e.status[:10]))
+
+
+def _kb_show(args: argparse.Namespace) -> None:
+    """``kb show <entry_id>`` — display full entry details."""
+    store = _make_kb_store(args)
+    entry = store.get_direct(args.entry_id)
+    if entry is None:
+        print(f"ERROR: Entry '{args.entry_id}' not found.")
+        sys.exit(1)
+
+    sev = entry.severity.value if hasattr(entry.severity, "value") else str(entry.severity)
+    print(f"Entry ID:    {entry.entry_id}")
+    print(f"Title:       {entry.title}")
+    print(f"Category:    {entry.category}")
+    print(f"Severity:    {sev}")
+    print(f"Status:      {entry.status}")
+    print(f"Occurrences: {entry.occurrence_count}")
+    print(f"Created:     {entry.created_at}")
+    print(f"Last Seen:   {entry.last_seen}")
+    print(f"\nRoot Cause:\n  {entry.root_cause}")
+    print(f"\nRecommended Actions:")
+    for i, action in enumerate(entry.recommended_actions, 1):
+        print(f"  {i}. {action}")
+
+    # Signature
+    sig = entry.signature
+    print(f"\nSignature:")
+    if sig.event_reasons:
+        print(f"  Event Reasons: {', '.join(sig.event_reasons)}")
+    if sig.log_patterns:
+        print(f"  Log Patterns:  {', '.join(sig.log_patterns)}")
+    if sig.metric_conditions:
+        print(f"  Metric Conds:  {', '.join(sig.metric_conditions)}")
+    if sig.resource_kinds:
+        print(f"  Resource Kinds: {', '.join(sig.resource_kinds)}")
+
+    # Affected versions
+    if entry.affected_versions:
+        print(f"\nAffected Versions:")
+        for av in entry.affected_versions:
+            parts = [f"  {av.component}"]
+            if av.min_version:
+                parts.append(f"min={av.min_version}")
+            if av.max_version:
+                parts.append(f"max={av.max_version}")
+            if av.fixed_in:
+                parts.append(f"fixed_in={av.fixed_in}")
+            print(" ".join(parts))
+
+    # Optional fields
+    if entry.review_notes:
+        print(f"\nReview Notes:\n  {entry.review_notes}")
+    if entry.alternative_explanations:
+        print(f"\nAlternative Explanations:")
+        for alt in entry.alternative_explanations:
+            print(f"  - {alt}")
+    if entry.checkpoint_questions:
+        print(f"\nCheckpoint Questions:")
+        for q in entry.checkpoint_questions:
+            print(f"  - {q}")
+
+
+def _kb_add(args: argparse.Namespace) -> None:
+    """``kb add`` — create a new KB entry."""
+    from k8s_scale_test.models import AffectedVersions, KBEntry, Severity, Signature
+
+    store = _make_kb_store(args)
+    now = datetime.now(timezone.utc)
+
+    # Generate entry_id from title slug
+    slug = re.sub(r"[^a-z0-9]+", "-", args.title.lower()).strip("-")[:60]
+    entry_id = slug
+
+    event_reasons = [r.strip() for r in args.event_reasons.split(",") if r.strip()]
+    log_patterns = []
+    if args.log_patterns:
+        log_patterns = [p.strip() for p in args.log_patterns.split(",") if p.strip()]
+
+    severity = Severity(args.severity)
+
+    affected_versions = []
+    if args.component:
+        affected_versions.append(AffectedVersions(
+            component=args.component,
+            min_version=args.min_version,
+            max_version=args.max_version,
+            fixed_in=args.fixed_in,
+        ))
+
+    entry = KBEntry(
+        entry_id=entry_id,
+        title=args.title,
+        category=args.category,
+        signature=Signature(
+            event_reasons=event_reasons,
+            log_patterns=log_patterns,
+            metric_conditions=[],
+            resource_kinds=[],
+        ),
+        root_cause=args.root_cause,
+        recommended_actions=[],
+        severity=severity,
+        affected_versions=affected_versions,
+        created_at=now,
+        last_seen=now,
+        occurrence_count=0,
+        status="active",
+    )
+
+    store.save(entry)
+    print(f"Created KB entry: {entry_id}")
+
+
+def _kb_remove(args: argparse.Namespace) -> None:
+    """``kb remove <entry_id>`` — delete an entry."""
+    store = _make_kb_store(args)
+
+    # Check if entry exists first
+    entry = store.get_direct(args.entry_id)
+    if entry is None:
+        print(f"ERROR: Entry '{args.entry_id}' not found.")
+        sys.exit(1)
+
+    store.delete(args.entry_id)
+    print(f"Removed KB entry: {args.entry_id}")
+
+
+def _kb_approve(args: argparse.Namespace) -> None:
+    """``kb approve <entry_id>`` — change status from pending to active."""
+    store = _make_kb_store(args)
+    entry = store.get_direct(args.entry_id)
+    if entry is None:
+        print(f"ERROR: Entry '{args.entry_id}' not found.")
+        sys.exit(1)
+
+    if entry.status == "active":
+        print(f"Entry '{args.entry_id}' is already active.")
+        return
+
+    entry.status = "active"
+    store.save(entry)
+    print(f"Approved KB entry: {args.entry_id} (pending → active)")
+
+
+def _kb_ingest(args: argparse.Namespace) -> None:
+    """``kb ingest <run_dir>`` — process resolved findings."""
+    from k8s_scale_test.kb_ingest import IngestionPipeline
+    from k8s_scale_test.kb_matcher import SignatureMatcher
+
+    run_dir = args.run_dir
+    if not Path(run_dir).is_dir():
+        print(f"ERROR: Run directory '{run_dir}' does not exist.")
+        sys.exit(1)
+
+    store = _make_kb_store(args)
+    matcher = SignatureMatcher()
+    pipeline = IngestionPipeline(store, matcher)
+    results = pipeline.ingest_run(run_dir)
+    print(f"Ingested {len(results)} entries from {run_dir}")
+
+
+def _kb_seed(args: argparse.Namespace) -> None:
+    """``kb seed`` — populate KB with seed entries."""
+    from k8s_scale_test.kb_seed import load_seed_entries
+
+    store = _make_kb_store(args)
+    entries = load_seed_entries(store)
+    print(f"Seeded {len(entries)} KB entries.")
 
 
 def _print_report(summary, config):
