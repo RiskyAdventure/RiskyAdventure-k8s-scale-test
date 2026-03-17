@@ -195,8 +195,11 @@ def _print_report(summary, config):
         prev = s.actual_ready
 
     # Failure analysis — quantify each problem
-    if summary.validity != RunValidity.VALID and summary.findings:
-        print(f"\n  FAILURE ANALYSIS ({shortfall:,} pods not reached)")
+    if summary.findings:
+        if summary.validity != RunValidity.VALID:
+            print(f"\n  FAILURE ANALYSIS ({shortfall:,} pods not reached)")
+        else:
+            print(f"\n  ANOMALIES ({len(summary.findings)} finding(s) during run)")
         print(f"  {'-'*52}")
 
         # Aggregate across all findings
@@ -206,10 +209,13 @@ def _print_report(summary, config):
         scheduling_failures = 0
         stuck_creating = 0
         unscheduled = 0
+        image_pull_failures = 0
+        insufficient_capacity = 0
+        webhook_failures = 0
+        invalid_disk = 0
 
         for f in summary.findings:
             rc = f.root_cause or ""
-            # Count IPAMD zero-prefix
             for ref in f.evidence_references:
                 if "zero_prefix=" in ref:
                     try:
@@ -229,6 +235,28 @@ def _print_report(summary, config):
                         scheduling_failures = max(scheduling_failures, n)
                     except Exception:
                         pass
+                if "InvalidDiskCapacity=" in ref:
+                    try:
+                        n = int(ref.split("InvalidDiskCapacity=")[1].split(",")[0])
+                        invalid_disk = max(invalid_disk, n)
+                    except Exception:
+                        pass
+                if "InsufficientCapacityError=" in ref:
+                    try:
+                        n = int(ref.split("InsufficientCapacityError=")[1].split(",")[0])
+                        insufficient_capacity = max(insufficient_capacity, n)
+                    except Exception:
+                        pass
+
+            # Count from k8s_events
+            if hasattr(f, 'k8s_events') and f.k8s_events:
+                for ev in f.k8s_events:
+                    msg = ev.message or ""
+                    reason = ev.reason or ""
+                    if "pull QPS exceeded" in msg or reason == "Failed" and "ImagePull" in msg:
+                        image_pull_failures += ev.count if hasattr(ev, 'count') and ev.count else 1
+                    if "kyverno" in msg.lower() and reason == "FailedCreate":
+                        webhook_failures += ev.count if hasattr(ev, 'count') and ev.count else 1
 
             # Count IAM auth nodes
             for part in rc.split(";"):
@@ -256,16 +284,29 @@ def _print_report(summary, config):
             print(f"    IPAMD zero-prefix: {ipamd_zero} nodes had 0 IPv4 prefixes (IPAMD init failure)")
         if iam_auth_nodes:
             print(f"    IAM auth failures: {len(iam_auth_nodes)} nodes could not call EC2 APIs")
+        if insufficient_capacity > 0:
+            print(f"    InsufficientCapacity: {insufficient_capacity} EC2 CreateFleet failures (AZ exhaustion)")
         if sandbox_failures > 0:
             print(f"    CNI sandbox failures: {sandbox_failures:,} FailedCreatePodSandBox events")
         if scheduling_failures > 0:
             print(f"    Scheduling failures: {scheduling_failures:,} FailedScheduling events")
+        if image_pull_failures > 0:
+            print(f"    Image pull failures: {image_pull_failures:,} pull QPS exceeded events")
+        if webhook_failures > 0:
+            print(f"    Webhook failures: {webhook_failures:,} Kyverno webhook errors (pod creation blocked)")
+        if invalid_disk > 0:
+            print(f"    InvalidDiskCapacity: {invalid_disk} nodes reported 0 image filesystem capacity")
         if stuck_creating > 0:
             print(f"    ContainerCreating: {stuck_creating:,} pods scheduled but waiting on CNI/image")
         if unscheduled > 0:
             print(f"    Unscheduled: {unscheduled:,} pods with no node assigned")
-        if not any([ipamd_zero, iam_auth_nodes, sandbox_failures, stuck_creating, unscheduled]):
-            print("    No specific root cause identified — check findings for details")
+        if not any([ipamd_zero, iam_auth_nodes, sandbox_failures, stuck_creating,
+                     unscheduled, image_pull_failures, insufficient_capacity,
+                     webhook_failures, invalid_disk]):
+            # Show root causes from findings directly
+            for f in summary.findings:
+                if f.root_cause:
+                    print(f"    {f.severity}: {f.root_cause}")
 
     # Summary line
     dur_min = summary.duration_seconds / 60
