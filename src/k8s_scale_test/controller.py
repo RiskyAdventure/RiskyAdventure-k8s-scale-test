@@ -1030,6 +1030,7 @@ class ScaleTestController:
             f"--report-dir={report_dir}",
             "--provider=eks",
             "--enable-exec-service=false",
+            "--delete-automanaged-namespaces=false",  # Keep objects alive until our cleanup
             "--v=2",
         ]
 
