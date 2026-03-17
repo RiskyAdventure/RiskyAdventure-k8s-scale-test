@@ -99,3 +99,107 @@
 2026-03-17 03:11:32,811 INFO     k8s_scale_test.controller:   Scaling: ready=5569 pending=4631 total=10200 (4.1m)
 2026-03-17 03:12:02,818 INFO     k8s_scale_test.controller:   Scaling: ready=6474 pending=3726 total=10200 (4.6m)
 2026-03-17 03:12:32,826 INFO     k8s_scale_test.controller:   Scaling: ready=7766 pending=2434 total=10200 (5.1m)
+2026-03-17 03:13:02,833 INFO     k8s_scale_test.controller:   Scaling: ready=8921 pending=1279 total=10200 (5.6m)
+2026-03-17 03:13:32,839 INFO     k8s_scale_test.controller:   Scaling: ready=9829 pending=371 total=10200 (6.1m)
+2026-03-17 03:13:57,960 INFO     k8s_scale_test.anomaly: Investigating: Ready rate 1.80/s dropped below threshold (rolling avg 11.19/s)
+2026-03-17 03:13:58,648 INFO     k8s_scale_test.anomaly:   Events: InvalidDiskCapacity=157, TerminationGracePeriodExpiring=50, InsufficientCapacityError=46
+2026-03-17 03:13:58,837 INFO     k8s_scale_test.anomaly:   Pod phases: 
+2026-03-17 03:14:02,851 INFO     k8s_scale_test.controller:   Scaling: ready=10117 pending=83 total=10200 (6.6m)
+2026-03-17 03:14:02,962 INFO     k8s_scale_test.anomaly: Investigating: Ready rate 0.40/s dropped below threshold (rolling avg 9.59/s)
+2026-03-17 03:14:03,570 INFO     k8s_scale_test.anomaly:   Events: InvalidDiskCapacity=157, TerminationGracePeriodExpiring=50, InsufficientCapacityError=46
+2026-03-17 03:14:03,766 INFO     k8s_scale_test.anomaly:   Pod phases: 
+2026-03-17 03:14:07,965 INFO     k8s_scale_test.anomaly: Investigating: Ready rate 0.00/s dropped below threshold (rolling avg 6.76/s)
+2026-03-17 03:14:08,645 INFO     k8s_scale_test.anomaly:   Events: InvalidDiskCapacity=157, TerminationGracePeriodExpiring=50, InsufficientCapacityError=46
+2026-03-17 03:14:08,839 INFO     k8s_scale_test.anomaly:   Pod phases: 
+2026-03-17 03:14:27,985 INFO     k8s_scale_test.anomaly: Investigating: Ready rate 0.20/s dropped below threshold (rolling avg 2.73/s)
+2026-03-17 03:14:28,602 INFO     k8s_scale_test.anomaly:   Events: InvalidDiskCapacity=157, TerminationGracePeriodExpiring=50, InsufficientCapacityError=46
+2026-03-17 03:14:28,773 INFO     k8s_scale_test.anomaly:   Pod phases: 
+2026-03-17 03:14:32,858 INFO     k8s_scale_test.controller:   Scaling: ready=10198 pending=2 total=10200 (7.1m)
+2026-03-17 03:14:32,987 INFO     k8s_scale_test.anomaly: Investigating: Ready rate 0.20/s dropped below threshold (rolling avg 2.70/s)
+2026-03-17 03:14:33,564 INFO     k8s_scale_test.anomaly:   Events: InvalidDiskCapacity=157, TerminationGracePeriodExpiring=50, InsufficientCapacityError=46
+2026-03-17 03:14:33,755 INFO     k8s_scale_test.anomaly:   Pod phases: 
+2026-03-17 03:14:37,989 INFO     k8s_scale_test.anomaly: Investigating: Ready rate 0.00/s dropped below threshold (rolling avg 2.70/s)
+2026-03-17 03:14:38,598 INFO     k8s_scale_test.anomaly:   Events: InvalidDiskCapacity=157, TerminationGracePeriodExpiring=50, InsufficientCapacityError=46
+2026-03-17 03:14:38,789 INFO     k8s_scale_test.anomaly:   Pod phases: 
+2026-03-17 03:14:42,992 INFO     k8s_scale_test.anomaly: Investigating: Ready rate 0.20/s dropped below threshold (rolling avg 0.93/s)
+2026-03-17 03:14:43,583 INFO     k8s_scale_test.anomaly:   Events: InvalidDiskCapacity=157, TerminationGracePeriodExpiring=50, InsufficientCapacityError=46
+2026-03-17 03:14:43,755 INFO     k8s_scale_test.anomaly:   Pod phases: 
+2026-03-17 03:14:47,861 INFO     k8s_scale_test.controller: Scaling complete: ready=10200/10000 in 7.4m
+2026-03-17 03:14:47,862 INFO     k8s_scale_test.controller: Waiting for monitor to confirm 10000 pods ready before hold...
+2026-03-17 03:14:47,864 INFO     k8s_scale_test.controller: Holding at peak for 120s + running health checks...
+2026-03-17 03:14:47,864 INFO     k8s_scale_test.health_sweep: Node health sweep: sampling 10 nodes at peak load...
+2026-03-17 03:14:50,925 WARNING  k8s_scale_test.health_sweep:   ip-100-64-0-178.us-west-2.compute.intern: Kubelet healthz failed on ip-100-64-0-178.us-west-2.compute.internal: Unauthorized
+2026-03-17 03:14:50,926 WARNING  k8s_scale_test.health_sweep:   ip-100-64-15-70.us-west-2.compute.intern: Kubelet healthz failed on ip-100-64-15-70.us-west-2.compute.internal: Unauthorized
+2026-03-17 03:14:50,926 WARNING  k8s_scale_test.health_sweep:   ip-100-64-194-0.us-west-2.compute.intern: Kubelet healthz failed on ip-100-64-194-0.us-west-2.compute.internal: Unauthorized
+2026-03-17 03:14:50,926 WARNING  k8s_scale_test.health_sweep:   ip-100-64-214-168.us-west-2.compute.inte: CPU pressure avg10=44.2% on ip-100-64-214-168.us-west-2.compute.internal; Kubelet healthz failed on ip-100-64-214-168.us-west-2.compute.internal: Unauthorized
+2026-03-17 03:14:50,926 WARNING  k8s_scale_test.health_sweep:   ip-100-64-249-193.us-west-2.compute.inte: CPU pressure avg10=97.7% on ip-100-64-249-193.us-west-2.compute.internal; Kubelet healthz failed on ip-100-64-249-193.us-west-2.compute.internal: Unauthorized
+2026-03-17 03:14:50,926 WARNING  k8s_scale_test.health_sweep:   ip-100-64-61-150.us-west-2.compute.inter: Kubelet healthz failed on ip-100-64-61-150.us-west-2.compute.internal: Unauthorized
+2026-03-17 03:14:50,926 WARNING  k8s_scale_test.health_sweep:   ip-192-168-105-63.us-west-2.compute.inte: Kubelet healthz failed on ip-192-168-105-63.us-west-2.compute.internal: Unauthorized
+2026-03-17 03:14:50,926 WARNING  k8s_scale_test.health_sweep:   ip-192-168-144-51.us-west-2.compute.inte: Kubelet healthz failed on ip-192-168-144-51.us-west-2.compute.internal: Unauthorized
+2026-03-17 03:14:50,926 WARNING  k8s_scale_test.health_sweep:   ip-192-168-184-16.us-west-2.compute.inte: Kubelet healthz failed on ip-192-168-184-16.us-west-2.compute.internal: Unauthorized
+2026-03-17 03:14:50,926 WARNING  k8s_scale_test.health_sweep:   ip-192-168-225-252.us-west-2.compute.int: CPU pressure avg10=84.7% on ip-192-168-225-252.us-west-2.compute.internal; Kubelet healthz failed on ip-192-168-225-252.us-west-2.compute.internal: Unauthorized
+2026-03-17 03:14:50,926 INFO     k8s_scale_test.health_sweep: Node health sweep: 0/10 healthy, 0 SSM failed, 13 issues
+2026-03-17 03:14:50,927 INFO     k8s_scale_test.health_sweep: Health sweep data saved to scale-test-results/2026-03-17_10-06-13/diagnostics/health_sweep.json
+2026-03-17 03:16:47,865 WARNING  k8s_scale_test.controller: Health sweep: 10/10 nodes have issues at peak load
+2026-03-17 03:16:47,865 INFO     k8s_scale_test.controller: Auto-approving: Node health sweep found 13 issue(s) at peak load. Review before cleanup?
+2026-03-17 03:16:47,870 INFO     k8s_scale_test.controller: Observer stopped
+2026-03-17 03:16:47,881 INFO     k8s_scale_test.controller: Cleanup: setting replicas to 0...
+2026-03-17 03:16:47,896 INFO     k8s_scale_test.flux: Set cpu-stress-test replicas=0 in apps/base/stress-test/cpu-stress.yaml
+2026-03-17 03:16:47,909 INFO     k8s_scale_test.flux: Set memory-stress-test replicas=0 in apps/base/stress-test/memory-stress.yaml
+2026-03-17 03:16:47,918 INFO     k8s_scale_test.flux: Set io-stress-test replicas=0 in apps/base/stress-test/io-stress.yaml
+2026-03-17 03:16:47,937 INFO     k8s_scale_test.flux: Set iperf3-client replicas=0 in apps/base/stress-test/network-stress.yaml
+2026-03-17 03:16:47,945 INFO     k8s_scale_test.flux: Set sysctl-connection-test replicas=0 in apps/base/stress-test/sysctl-stress.yaml
+2026-03-17 03:16:47,960 INFO     k8s_scale_test.flux: Set iperf3-server replicas=0 in apps/base/stress-test/network-stress.yaml
+2026-03-17 03:16:53,145 INFO     k8s_scale_test.controller: Committed and pushed: scale-test cleanup: reset all replicas to 0
+2026-03-17 03:17:53,163 WARNING  k8s_scale_test.controller: Flux reconcile failed (will auto-sync): Command '['flux', 'reconcile', 'kustomization', 'app', '--with-source']' timed out after 60 seconds
+2026-03-17 03:17:53,395 INFO     k8s_scale_test.controller:   Cleanup: 10200 pods to delete
+2026-03-17 03:18:03,645 INFO     k8s_scale_test.controller:   Deleting: 10000 remaining (19/s, ~8.7m left)
+2026-03-17 03:18:13,956 INFO     k8s_scale_test.controller:   Deleting: 5500 remaining (216/s, ~0.4m left)
+2026-03-17 03:18:24,186 INFO     k8s_scale_test.controller:   Deleting: 0 remaining (177/s, ~0.0m left)
+2026-03-17 03:18:24,190 INFO     k8s_scale_test.controller:   Pods deleted in 0.5m
+2026-03-17 03:18:24,191 INFO     k8s_scale_test.controller: CL2 preload finished: Failed
+2026-03-17 03:18:24,191 INFO     k8s_scale_test.controller: CL2 cleanup: deleting cl2-test-* namespaces...
+2026-03-17 03:18:31,030 INFO     k8s_scale_test.controller: CL2 cleanup: deleted 125 namespaces: cl2-test-1, cl2-test-10, cl2-test-100, cl2-test-101, cl2-test-102, cl2-test-103, cl2-test-104, cl2-test-105, cl2-test-106, cl2-test-107, cl2-test-108, cl2-test-109, cl2-test-11, cl2-test-110, cl2-test-111, cl2-test-112, cl2-test-113, cl2-test-114, cl2-test-115, cl2-test-116, cl2-test-117, cl2-test-118, cl2-test-119, cl2-test-12, cl2-test-120, cl2-test-121, cl2-test-122, cl2-test-123, cl2-test-124, cl2-test-125, cl2-test-13, cl2-test-14, cl2-test-15, cl2-test-16, cl2-test-17, cl2-test-18, cl2-test-19, cl2-test-2, cl2-test-20, cl2-test-21, cl2-test-22, cl2-test-23, cl2-test-24, cl2-test-25, cl2-test-26, cl2-test-27, cl2-test-28, cl2-test-29, cl2-test-3, cl2-test-30, cl2-test-31, cl2-test-32, cl2-test-33, cl2-test-34, cl2-test-35, cl2-test-36, cl2-test-37, cl2-test-38, cl2-test-39, cl2-test-4, cl2-test-40, cl2-test-41, cl2-test-42, cl2-test-43, cl2-test-44, cl2-test-45, cl2-test-46, cl2-test-47, cl2-test-48, cl2-test-49, cl2-test-5, cl2-test-50, cl2-test-51, cl2-test-52, cl2-test-53, cl2-test-54, cl2-test-55, cl2-test-56, cl2-test-57, cl2-test-58, cl2-test-59, cl2-test-6, cl2-test-60, cl2-test-61, cl2-test-62, cl2-test-63, cl2-test-64, cl2-test-65, cl2-test-66, cl2-test-67, cl2-test-68, cl2-test-69, cl2-test-7, cl2-test-70, cl2-test-71, cl2-test-72, cl2-test-73, cl2-test-74, cl2-test-75, cl2-test-76, cl2-test-77, cl2-test-78, cl2-test-79, cl2-test-8, cl2-test-80, cl2-test-81, cl2-test-82, cl2-test-83, cl2-test-84, cl2-test-85, cl2-test-86, cl2-test-87, cl2-test-88, cl2-test-89, cl2-test-9, cl2-test-90, cl2-test-91, cl2-test-92, cl2-test-93, cl2-test-94, cl2-test-95, cl2-test-96, cl2-test-97, cl2-test-98, cl2-test-99
+2026-03-17 03:18:31,055 WARNING  k8s_scale_test.controller: Verification issues:
+2026-03-17 03:18:31,055 WARNING  k8s_scale_test.controller:   - 1 gap(s) in rate data — chart rates may be averaged over long intervals
+2026-03-17 03:18:31,055 WARNING  k8s_scale_test.controller:   - Observer vs monitor peak mismatch: observer=2000 monitor=10200
+2026-03-17 03:18:31,056 WARNING  k8s_scale_test.controller:   - Rate mismatch: monitor_peak=65.6/s observer_peak=354.0/s (ratio=0.2x)
+2026-03-17 03:18:31,288 INFO     k8s_scale_test.chart: Chart written to scale-test-results/2026-03-17_10-06-13/chart.html
+2026-03-17 03:18:31,288 INFO     k8s_scale_test.controller: Chart: scale-test-results/2026-03-17_10-06-13/chart.html
+2026-03-17 03:18:31,590 INFO     k8s_scale_test.controller: Test run 2026-03-17_10-06-13 complete: valid
+2026-03-17 03:18:31,591 INFO     k8s_scale_test.controller:   Deleting alt nodeclaims...
+2026-03-17 03:18:47,217 INFO     k8s_scale_test.controller:   Nodes draining: 194 remaining (16s)
+2026-03-17 03:19:03,380 INFO     k8s_scale_test.controller:   Nodes draining: 194 remaining (32s)
+2026-03-17 03:19:19,726 INFO     k8s_scale_test.controller:   Nodes draining: 193 remaining (48s)
+2026-03-17 03:19:35,809 INFO     k8s_scale_test.controller:   Nodes draining: 168 remaining (64s)
+2026-03-17 03:19:51,551 INFO     k8s_scale_test.controller:   Nodes draining: 97 remaining (80s)
+2026-03-17 03:20:07,159 INFO     k8s_scale_test.controller:   Nodes draining: 59 remaining (96s)
+2026-03-17 03:20:22,603 INFO     k8s_scale_test.controller:   Nodes draining: 17 remaining (111s)
+2026-03-17 03:20:37,937 INFO     k8s_scale_test.controller:   Nodes draining: 7 remaining (126s)
+2026-03-17 03:20:53,544 INFO     k8s_scale_test.controller:   Nodes draining: 4 remaining (142s)
+2026-03-17 03:21:08,860 INFO     k8s_scale_test.controller:   Nodes drained in 2.6m
+
+============================================================
+[OPERATOR] Preflight complete. Approve to proceed with scaling?
+  max_achievable: 30492
+  target: 10000
+============================================================
+
+============================================================
+[OPERATOR] Node health sweep found 13 issue(s) at peak load. Review before cleanup?
+  sampled: 10
+  healthy: 0
+  issues: ['Kubelet healthz failed on ip-100-64-0-178.us-west-2.compute.internal: Unauthorized', 'Kubelet healthz failed on ip-100-64-15-70.us-west-2.compute.internal: Unauthorized', 'Kubelet healthz failed on ip-100-64-194-0.us-west-2.compute.internal: Unauthorized', 'CPU pressure avg10=44.2% on ip-100-64-214-168.us-west-2.compute.internal', 'Kubelet healthz failed on ip-100-64-214-168.us-west-2.compute.internal: Unauthorized', 'CPU pressure avg10=97.7% on ip-100-64-249-193.us-west-2.compute.internal', 'Kubelet healthz failed on ip-100-64-249-193.us-west-2.compute.internal: Unauthorized', 'Kubelet healthz failed on ip-100-64-61-150.us-west-2.compute.internal: Unauthorized', 'Kubelet healthz failed on ip-192-168-105-63.us-west-2.compute.internal: Unauthorized', 'Kubelet healthz failed on ip-192-168-144-51.us-west-2.compute.internal: Unauthorized']
+============================================================
+
+======================================================================
+  PASSED — 10,200 pods reached target 10,000
+======================================================================
+
+  Step   Target    Ready  Pending  Cumul Time     Rate
+  -------------------------------------------------------
+     1   10,000   10,200        0       7.4m    23.0/s
+
+  Duration: 12.3m | Nodes: 195 | Anomalies: 1
+  Results: ./scale-test-results/2026-03-17_10-06-13/
+  Chart: ./scale-test-results/2026-03-17_10-06-13/chart.html

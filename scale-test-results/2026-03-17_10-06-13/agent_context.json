@@ -5,8 +5,8 @@
   "namespaces": [
     "stress-test"
   ],
-  "current_phase": "scaling",
-  "phase_start": "2026-03-17T10:06:20.232106+00:00",
+  "current_phase": "cleanup",
+  "phase_start": "2026-03-17T10:16:47.870635+00:00",
   "amp_workspace_id": "ws-641df7c9-35d5-4cda-89e0-dc2dc873262d",
   "cloudwatch_log_group": "/aws/containerinsights/tf-shane/dataplane",
   "eks_cluster_name": "tf-shane",

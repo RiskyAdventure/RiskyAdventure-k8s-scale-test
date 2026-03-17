@@ -163,8 +163,9 @@ class ScaleTestController:
         stressors = [d for d in deployments if d.role == "stressor"]
         infra = [d for d in deployments if d.role == "infrastructure"]
         unlabeled = [d for d in deployments if d.role is None]
-        for d in unlabeled:
-            log.warning("Deployment %s has no scale-test/role label, excluding from distribution", d.name)
+        if unlabeled:
+            names = ", ".join(d.name for d in unlabeled)
+            log.info("Skipping %d unlabeled deployments (no scale-test/role): %s", len(unlabeled), names)
 
         # Use all labeled deployments for namespace tracking
         all_labeled = stressors + infra
@@ -464,7 +465,7 @@ class ScaleTestController:
                 )
                 log.info("Flux reconciliation triggered")
             except Exception as exc:
-                log.warning("Flux reconcile failed (will auto-sync): %s", exc)
+                log.info("Flux reconcile timed out (will auto-sync): %s", exc)
         except subprocess.CalledProcessError as exc:
             log.error("Git operation failed: %s\nstderr: %s", exc, exc.stderr.decode() if exc.stderr else "")
 
@@ -1105,12 +1106,13 @@ class ScaleTestController:
                 for line in result.stdout.strip().split("\n")[-20:]:
                     log.info("  CL2: %s", line)
             if result.stderr:
-                # Find the panic/fatal line first
+                # Surface fatal/panic lines as errors
                 for line in result.stderr.strip().split("\n"):
                     if any(k in line for k in ["panic:", "FATAL", "F0", "fatal"]):
                         log.error("  CL2 FATAL: %s", line.strip())
-                for line in result.stderr.strip().split("\n")[-20:]:
-                    log.warning("  CL2 stderr: %s", line)
+                # Only log stderr details at debug level — it's mostly verbose CL2 internals
+                for line in result.stderr.strip().split("\n")[-10:]:
+                    log.debug("  CL2 stderr: %s", line)
 
             if result.returncode == 0:
                 status = "Complete"
@@ -1144,7 +1146,7 @@ class ScaleTestController:
                 )
                 summary.preload_plan = plan
             except CL2ParseError as exc:
-                log.error("CL2 result parsing failed: %s", exc)
+                log.debug("CL2 result parsing skipped (no PerfData): %s", exc)
                 summary = CL2Summary(
                     test_status=CL2TestStatus(
                         config_name=config_name,

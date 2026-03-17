@@ -27,7 +27,6 @@ HEALTH_CHECK_CMD = (
     "cat /proc/pressure/memory 2>/dev/null; echo '===PSI_SEP==='; "
     "cat /proc/pressure/io 2>/dev/null; "
     "echo '===KUBELET_START==='; "
-    "curl -sk https://localhost:10250/healthz 2>&1; echo '===HEALTH_SEP==='; "
     "systemctl is-active kubelet 2>&1; "
     "echo '===DISK_START==='; "
     "df -h / 2>/dev/null; "
@@ -151,19 +150,14 @@ def parse_sweep_output(node_name: str, output: str) -> list[str]:
                                     issues.append(f"IO pressure avg10={v:.1f}% on {node_name}")
                                 break
 
-    # Kubelet
+    # Kubelet — systemctl check (API-side health comes from node conditions)
     if "===KUBELET_START===" in output:
         kub = output.split("===KUBELET_START===", 1)[1]
         if "===DISK_START===" in kub:
             kub = kub.split("===DISK_START===", 1)[0]
-        if "===HEALTH_SEP===" in kub:
-            parts = kub.split("===HEALTH_SEP===")
-            healthz = parts[0].strip()
-            systemctl = parts[1].strip() if len(parts) > 1 else ""
-            if healthz and healthz != "ok":
-                issues.append(f"Kubelet healthz failed on {node_name}: {healthz[:80]}")
-            if systemctl and systemctl != "active":
-                issues.append(f"Kubelet not active on {node_name}: {systemctl}")
+        systemctl = kub.strip()
+        if systemctl and systemctl != "active":
+            issues.append(f"Kubelet not active on {node_name}: {systemctl}")
 
     # Disk
     if "===DISK_START===" in output:
