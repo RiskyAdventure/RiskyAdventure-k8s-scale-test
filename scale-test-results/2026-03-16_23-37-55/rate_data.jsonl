@@ -1,2 +1,0 @@
-{"timestamp": "2026-03-16T23:38:10.354531+00:00", "ready_count": 10200, "delta_ready": 10200, "ready_rate": 0.0, "rolling_avg_rate": 0.0, "pending_count": 0, "total_pods": 10200, "interval_seconds": 4e-06, "is_gap": false}
-{"timestamp": "2026-03-16T23:38:15.355567+00:00", "ready_count": 10200, "delta_ready": 0, "ready_rate": 0.0, "rolling_avg_rate": 0.0, "pending_count": 0, "total_pods": 10200, "interval_seconds": 5.001036, "is_gap": false}

@@ -30,3 +30,6 @@ flux2/apps/base/ack-clusters/
 
 # Hypothesis PBT cache
 .hypothesis/
+
+# Scale test results — ephemeral run data, not source code
+scale-test-results/
