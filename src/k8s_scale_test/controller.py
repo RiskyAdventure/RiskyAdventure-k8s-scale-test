@@ -646,56 +646,62 @@ class ScaleTestController:
         )
 
     async def _start_observer(self, run_id: str, namespaces: list[str]):
-        """Launch an independent observer that polls deployment status periodically.
+        """Launch an independent observer that counts actual Running pods.
 
-        Uses `kubectl get deployment` every 5s instead of `kubectl -w` (watch),
-        because the watch stream can't keep up at 30K+ pods — it falls behind
-        and reports stale data. Polling gives a consistent snapshot each interval.
+        The monitor uses the K8s Deployment watch API (.status.readyReplicas).
+        The observer uses a completely different data path — it lists actual
+        pods via the pod API and counts those in Running phase. This catches
+        discrepancies between what the deployment controller reports and what's
+        actually running on the cluster.
 
-        Writes to {run_dir}/observer.log so each run has its own observer data.
+        Polls every 10s (offset from the monitor's 5s tick) to avoid
+        synchronized API pressure.
+
+        Writes to {run_dir}/observer.log for post-run cross-validation.
         """
-        import subprocess
         rd = self.evidence_store._run_dir(run_id)
         obs_file = rd / "observer.log"
-        ns = namespaces[0] if namespaces else "default"
+        ns_list = namespaces if namespaces else ["default"]
 
-        obs_file.write_text("timestamp,name ready replicas available\n")
+        obs_file.write_text("timestamp,namespace running pending total\n")
 
         try:
             import threading
 
             def _poller():
                 try:
+                    v1 = self.k8s_client.CoreV1Api()
                     with open(obs_file, "a") as fh:
                         while self._running:
                             try:
-                                result = subprocess.run(
-                                    ["kubectl", "get", "deployment", "-n", ns,
-                                     "-o", "custom-columns="
-                                     "NAME:.metadata.name,"
-                                     "READY:.status.readyReplicas,"
-                                     "REPLICAS:.status.replicas,"
-                                     "AVAILABLE:.status.availableReplicas",
-                                     "--no-headers"],
-                                    capture_output=True, text=True, timeout=15,
-                                )
-                                if result.returncode == 0:
-                                    ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-                                    for line in result.stdout.strip().splitlines():
-                                        line = line.strip()
-                                        if line:
-                                            fh.write(f"{ts},{line}\n")
-                                    fh.flush()
+                                total_running = 0
+                                total_pending = 0
+                                total_all = 0
+                                for ns in ns_list:
+                                    pods = v1.list_namespaced_pod(
+                                        ns, watch=False, _request_timeout=15,
+                                        field_selector="status.phase!=Succeeded,status.phase!=Failed",
+                                    )
+                                    for pod in pods.items:
+                                        phase = pod.status.phase if pod.status else ""
+                                        total_all += 1
+                                        if phase == "Running":
+                                            total_running += 1
+                                        elif phase == "Pending":
+                                            total_pending += 1
+                                ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+                                fh.write(f"{ts},all {total_running} {total_pending} {total_all}\n")
+                                fh.flush()
                             except Exception:
                                 pass
-                            _time.sleep(5)
+                            _time.sleep(10)
                 except Exception:
                     pass
 
             t = threading.Thread(target=_poller, daemon=True)
             t.start()
-            log.info("Observer started: kubectl poll every 5s in '%s' → %s", ns, obs_file)
-            # Return a sentinel object with terminate/wait/kill for _stop_observer compat
+            log.info("Observer started: pod-list poll every 10s across %d namespace(s) → %s",
+                     len(ns_list), obs_file)
             return _ObserverHandle(t)
         except Exception as exc:
             log.warning("Observer failed to start: %s", exc)
@@ -830,7 +836,7 @@ class ScaleTestController:
                 log.error("Failed to refresh K8s token: %s", exc)
 
     def _verify_run_data(self, run_id: str, result) -> None:
-        """Cross-check rate_data against controller results and observer log."""
+        """Cross-check rate_data (from deployment watch) against observer (from pod list API)."""
         import json
         from pathlib import Path
 
@@ -863,14 +869,17 @@ class ScaleTestController:
         if gaps:
             issues.append(f"{len(gaps)} gap(s) in rate data — chart rates may be averaged over long intervals")
 
-        # Check 4: observer cross-check (run-scoped file first, then legacy)
+        # Check 4: observer cross-check
+        # Observer uses pod list API (actual Running pods) vs monitor's deployment watch
+        # (.status.readyReplicas). Discrepancies indicate deployment controller lag or
+        # monitor watch disconnects.
         obs_file = rd / "observer.log"
         if not obs_file.exists():
             obs_file = Path("observer.log")
         if obs_file.exists():
             obs_peak = 0
             obs_lines = [l.strip() for l in obs_file.read_text().splitlines()
-                         if l.strip() and not l.startswith("timestamp") and not l.startswith("Observer")]
+                         if l.strip() and not l.startswith("timestamp")]
             for line in obs_lines:
                 parts = line.split(",", 1)
                 if len(parts) < 2:
@@ -921,10 +930,11 @@ class ScaleTestController:
 
                     if obs_rates:
                         obs_peak_rate = max(obs_rates)
-                        monitor_rates = [p["ready_rate"] for p in points if p["ready_rate"] > 0]
+                        monitor_rates = [p["ready_rate"] for p in points
+                                         if p["ready_rate"] > 0 and not p.get("is_gap")]
                         monitor_peak_rate = max(monitor_rates) if monitor_rates else 0
 
-                        # Allow 50% tolerance — different sampling methods
+                        # Allow 3x tolerance — different data paths and sampling intervals
                         if monitor_peak_rate > 0 and obs_peak_rate > 0:
                             ratio = monitor_peak_rate / obs_peak_rate
                             if ratio > 3.0 or ratio < 0.33:
@@ -936,7 +946,7 @@ class ScaleTestController:
                                          "(monitor=%.1f/s, observer=%.1f/s, ratio=%.1fx)",
                                          monitor_peak_rate, obs_peak_rate, ratio)
             else:
-                issues.append("Observer log exists but no valid data — kubectl watch may have failed")
+                issues.append("Observer log exists but no valid data — pod list polling may have failed")
         else:
             issues.append("No observer log found — independent rate validation unavailable")
 
