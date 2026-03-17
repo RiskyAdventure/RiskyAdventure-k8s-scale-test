@@ -815,6 +815,88 @@ class PreflightChecker:
             log.info("  Pod ceiling: %d effective (%d raw × %.0f%%), target %d — OK",
                      effective_ceiling, relevant_ceiling, scheduling_efficiency * 100, self.config.target_pods)
 
+        # 5. Observability connectivity — non-blocking but critical for investigation
+        constraints_checked.append("observability")
+        obs_ok = 0
+        obs_total = 0
+
+        # 5a. AMP / Prometheus
+        obs_total += 1
+        if self.config.amp_workspace_id or getattr(self.config, 'prometheus_url', None):
+            try:
+                from k8s_scale_test.health_sweep import AMPMetricCollector
+                collector = AMPMetricCollector(
+                    amp_workspace_id=self.config.amp_workspace_id,
+                    prometheus_url=getattr(self.config, 'prometheus_url', None),
+                    aws_profile=self.config.aws_profile,
+                )
+                result = await collector._query_promql("up")
+                if result.get("status") == "success":
+                    log.info("  AMP connectivity: OK")
+                    obs_ok += 1
+                else:
+                    recommendations.append(f"AMP returned status '{result.get('status')}' — metrics unavailable")
+                    log.warning("  AMP connectivity: unexpected status '%s'", result.get("status"))
+            except Exception as exc:
+                recommendations.append(f"AMP connectivity failed: {exc}")
+                log.warning("  AMP connectivity: FAILED — %s", exc)
+        else:
+            recommendations.append("No AMP workspace or Prometheus URL configured")
+            log.info("  AMP connectivity: skipped (not configured)")
+
+        # 5b. CloudWatch Logs
+        obs_total += 1
+        if self.config.cloudwatch_log_group:
+            try:
+                cw = self.aws_client.client("logs", region_name="us-west-2")
+                resp = cw.describe_log_groups(
+                    logGroupNamePrefix=self.config.cloudwatch_log_group,
+                    limit=1,
+                )
+                groups = resp.get("logGroups", [])
+                if groups and groups[0].get("logGroupName") == self.config.cloudwatch_log_group:
+                    log.info("  CloudWatch Logs: OK (log group exists)")
+                    obs_ok += 1
+                else:
+                    recommendations.append(
+                        f"CloudWatch log group '{self.config.cloudwatch_log_group}' not found"
+                    )
+                    log.warning("  CloudWatch Logs: log group not found")
+            except Exception as exc:
+                recommendations.append(f"CloudWatch Logs connectivity failed: {exc}")
+                log.warning("  CloudWatch Logs: FAILED — %s", exc)
+        else:
+            recommendations.append("No CloudWatch log group configured")
+            log.info("  CloudWatch Logs: skipped (not configured)")
+
+        # 5c. EKS API (already implicitly tested by earlier K8s calls, but verify cluster name)
+        obs_total += 1
+        if self.config.eks_cluster_name:
+            try:
+                eks = self.aws_client.client("eks", region_name="us-west-2")
+                cluster = eks.describe_cluster(name=self.config.eks_cluster_name)
+                status = cluster.get("cluster", {}).get("status", "")
+                if status == "ACTIVE":
+                    log.info("  EKS API: OK (cluster '%s' is ACTIVE)", self.config.eks_cluster_name)
+                    obs_ok += 1
+                else:
+                    recommendations.append(
+                        f"EKS cluster '{self.config.eks_cluster_name}' status is '{status}', not ACTIVE"
+                    )
+                    log.warning("  EKS API: cluster status '%s'", status)
+            except Exception as exc:
+                recommendations.append(f"EKS API connectivity failed: {exc}")
+                log.warning("  EKS API: FAILED — %s", exc)
+        else:
+            recommendations.append("No EKS cluster name configured")
+            log.info("  EKS API: skipped (not configured)")
+
+        if obs_ok == obs_total:
+            log.info("  Observability: all %d checks passed", obs_total)
+        else:
+            log.warning("  Observability: %d/%d checks passed — investigation capability degraded",
+                        obs_ok, obs_total)
+
         # Max achievable
         avg_cpu_per_pod = total_cpu_m / self.config.target_pods if self.config.target_pods > 0 else 1
         max_by_cpu = int(total_pool_cpu * 1000 / avg_cpu_per_pod) if avg_cpu_per_pod > 0 else 0

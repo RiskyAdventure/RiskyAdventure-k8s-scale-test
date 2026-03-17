@@ -1,5 +1,6 @@
 ---
 inclusion: auto
+description: Domain knowledge for investigating EKS scale test issues using AMP, CloudWatch, and EKS MCP tools
 ---
 
 # EKS Scale Test Observability Guide

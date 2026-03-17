@@ -191,8 +191,12 @@ class AMPMetricCollector:
         if self._use_sigv4:
             import botocore.session
 
-            self._botocore_session = botocore.session.Session(profile=aws_profile)
+            self._botocore_session = botocore.session.Session()
+            if aws_profile:
+                self._botocore_session.set_config_variable("profile", aws_profile)
             self._credentials = self._botocore_session.get_credentials()
+            if self._credentials is None:
+                log.warning("AMP SigV4: no credentials resolved for profile=%s", aws_profile)
 
     # ------------------------------------------------------------------
     # Public API
@@ -264,6 +268,8 @@ class AMPMetricCollector:
 
         # Re-resolve credentials to pick up refreshed tokens
         creds = self._botocore_session.get_credentials() if self._botocore_session else self._credentials
+        if creds is None:
+            raise RuntimeError("No AWS credentials available for AMP SigV4 signing")
         resolved = creds.get_frozen_credentials() if hasattr(creds, 'get_frozen_credentials') else creds
 
         aws_req = AWSRequest(method="GET", url=url, headers={"Accept": "application/json"})

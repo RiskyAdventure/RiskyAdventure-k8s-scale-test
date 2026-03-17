@@ -1,5 +1,6 @@
 ---
 inclusion: manual
+description: Runbook for launching and monitoring EKS scale tests
 ---
 
 # Run Scale Test
