@@ -38,6 +38,7 @@ class EvidenceStore:
             ├── events.jsonl               # K8s Warning events (append-only)
             ├── summary.json               # Final test run summary
             ├── cl2_summary.json           # ClusterLoader2 results (if CL2 was run)
+            ├── scanner_findings.jsonl     # ObservabilityScanner proactive findings
             ├── agent_context.json         # AI sub-agent context file
             ├── observer.log               # Independent pod-count observer (CSV)
             ├── findings/                  # Anomaly investigation results

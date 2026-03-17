@@ -66,6 +66,7 @@ After launching, use `getProcessOutput` to check progress. Watch for:
 - Preflight GO/NO_GO decision
 - Infrastructure pod scaling (iperf3 servers)
 - Stressor pod scaling progress
+- ObservabilityScanner findings (proactive fleet-wide PromQL + CloudWatch alerts during scaling)
 - Anomaly alerts (rate drops, pending pods)
 - CL2 preload status
 - Hold-at-peak health sweep
@@ -75,9 +76,9 @@ After launching, use `getProcessOutput` to check progress. Watch for:
 
 1. **Preflight** — Validates cluster capacity (IPs, vCPU quota, NodePool limits, pod ceiling)
 2. **Infrastructure scaling** — Deploys iperf3 servers first
-3. **Stressor scaling** — Distributes target pods across cpu-stress, memory-stress, io-stress, iperf3-client, sysctl-connection-test
+3. **Stressor scaling** — Distributes target pods across cpu-stress, memory-stress, io-stress, iperf3-client, sysctl-connection-test. The ObservabilityScanner runs concurrently, querying AMP every 15-30s for fleet-wide metrics (CPU, memory, pending pods, Karpenter queue depth, network errors, disk pressure) and CloudWatch every 60s for error patterns.
 4. **CL2 preload** — Runs ClusterLoader2 mixed-workload concurrently
-5. **Hold at peak** — Holds for `--hold-at-peak` seconds, runs health sweep
+5. **Hold at peak** — Holds for `--hold-at-peak` seconds, runs health sweep. Scanner switches to hold-at-peak queries (memory pressure, CPU outliers).
 6. **Cleanup** — Scales all deployments back to 0, drains nodes
 
 ### Error Patterns to Watch
@@ -92,11 +93,12 @@ After launching, use `getProcessOutput` to check progress. Watch for:
 
 Results are saved to `./scale-test-results/<run_id>/`. Key files:
 
-- `summary.json` — Pass/fail, peak pod count, scaling steps, findings
+- `summary.json` — Pass/fail, peak pod count, scaling steps, findings, scanner_findings
 - `chart.html` — Visual scaling timeline
 - `preflight.json` — Capacity validation details
 - `rate_data.jsonl` — Pod ready rate time series
 - `events.jsonl` — Kubernetes events captured during the run
+- `scanner_findings.jsonl` — ObservabilityScanner findings (proactive PromQL + CloudWatch alerts, one JSON line per finding)
 - `findings/` — Anomaly and diagnostic findings
 
 ## Optional Parameters

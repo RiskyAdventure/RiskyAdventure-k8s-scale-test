@@ -97,6 +97,16 @@ Before any investigation, read `agent_context.json` from the evidence directory.
 - Any alerts that have fired (rate drops that need investigation)
 - Any existing findings from the anomaly detector (avoid duplicating work)
 
+### ObservabilityScanner Findings
+
+The controller now runs an `ObservabilityScanner` as a background task during scaling and hold-at-peak. Scanner findings are saved to `scanner_findings.jsonl` in the evidence directory and included in `summary.json` under the `scanner_findings` key. These are separate from anomaly detector findings.
+
+The scanner runs two tiers of queries:
+- **Tier 1 (Prometheus)** — Fleet-wide PromQL queries every 15-30s: node count growth, pending pods, CPU/memory pressure, Karpenter queue depth, network errors, disk pressure
+- **Tier 2 (CloudWatch)** — Logs Insights queries every 60s, triggered when Tier 1 finds something: top error patterns in dataplane logs
+
+When investigating, check `scanner_findings.jsonl` first — the scanner may have already detected the issue proactively before the anomaly detector's rate drop alert fired. Scanner findings include `query_name`, `severity`, `title`, `detail`, and `source` fields.
+
 ## 2. AMP Metric Patterns
 
 ### Available Metric Sources
@@ -274,9 +284,11 @@ Use this format for finding IDs:
 
 The most valuable findings come from correlating signals across AMP, CloudWatch Logs, and EKS state. Here's how to approach it:
 
-1. **Query the KB first.** Before any manual investigation, check if the K8s events or log patterns match a known KB entry. This can resolve the issue instantly.
+1. **Check scanner findings first.** Read `scanner_findings.jsonl` from the evidence directory. The ObservabilityScanner may have already detected the issue proactively during scaling or hold-at-peak. If a scanner finding matches the alert, use it as your starting point — it includes the raw query result and severity assessment.
 
-2. **Start with the broadest signal.** If the KB has no match and you're doing a proactive scan, start with AMP fleet-wide metrics to identify which nodes or components are under stress. If you're investigating an alert, start with the alert details (timestamp, rate, affected counts).
+2. **Query the KB next.** Before any manual investigation, check if the K8s events or log patterns match a known KB entry. This can resolve the issue instantly.
+
+3. **Start with the broadest signal.** If the KB has no match and you're doing a proactive scan, start with AMP fleet-wide metrics to identify which nodes or components are under stress. If you're investigating an alert, start with the alert details (timestamp, rate, affected counts).
 
 3. **Narrow to affected resources.** Once you identify affected nodes from AMP metrics, use those node hostnames to filter CloudWatch Logs. Look for error patterns on those specific nodes around the same time window.
 

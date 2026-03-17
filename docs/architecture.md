@@ -82,8 +82,8 @@ Every Python file in `src/k8s_scale_test/` has one job. Here's what each one doe
 │                                                                 │
 │  kb_ingest.py        models.py             observability.py     │
 │  (auto-add new       (all data             (fleet-level scan    │
-│   patterns to KB)     structures)           catalog — not yet   │
-│                                             wired in)           │
+│   patterns to KB)     structures)           catalog — proactive  │
+│                                             PromQL + CW queries) │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -117,6 +117,13 @@ This diagram shows what data flows where during the scaling phase — the most a
        │       │
        │       └──► Finding (saved to evidence store)
        │
+       │  ObservabilityScanner (background task, 15-30s)
+       │  │
+       │  ├──► AMP PromQL (fleet-wide CPU, memory, pending, Karpenter)
+       │  ├──► CloudWatch Logs Insights (error patterns, on-demand)
+       │  │
+       │  └──► scanner_findings.jsonl (evidence store)
+       │
        │  Observer (pod list API, 10s)
        │  │
        │  └──► observer.log (independent cross-check)
@@ -135,7 +142,7 @@ The test exercises the real deployment path. In production, changes go through G
 The monitor uses the Deployment watch API (`.status.readyReplicas`). The observer uses the Pod list API (actual Running pods). These are different K8s API endpoints with different failure modes. If the deployment controller's bookkeeping drifts from reality, the observer catches it. If the observer's pod list call fails, the monitor still works.
 
 **Why reactive investigation instead of continuous monitoring?**
-The anomaly detector only runs when something goes wrong (rate drop, timeout, monitor gap). This is intentional — at 30K pods, the K8s API is under heavy load. Running continuous SSM commands and EC2 API calls would add more pressure. The anomaly detector fires targeted queries only when needed.
+The anomaly detector only runs when something goes wrong (rate drop, timeout, monitor gap). This is intentional — at 30K pods, the K8s API is under heavy load. Running continuous SSM commands and EC2 API calls would add more pressure. The anomaly detector fires targeted queries only when needed. The ObservabilityScanner complements this with lightweight fleet-wide PromQL queries (one HTTP request covers all nodes) that run every 15-30s — cheap enough to run continuously without adding API pressure. CloudWatch drill-downs only trigger when Prometheus finds something.
 
 **Why a Known Issues KB?**
 Many scale test failures are the same patterns repeating (IPAMD MAC collision, ECR pull throttle, NVMe disk init). The KB short-circuits investigation — if the K8s events match a known pattern, the anomaly detector returns the known root cause immediately instead of running SSM commands on 3 nodes.

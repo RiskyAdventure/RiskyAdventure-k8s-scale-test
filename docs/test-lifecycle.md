@@ -84,6 +84,7 @@ The controller:
 - The monitor tracks pod ready rate and fires alerts on rate drops
 - The event watcher streams K8s Warning events to `events.jsonl`
 - The observer independently counts Running pods every 10s
+- The ObservabilityScanner runs fleet-wide PromQL queries every 15-30s (CPU, memory, pending pods, Karpenter queue, network errors, disk pressure) and CloudWatch Logs Insights queries every 60s when Prometheus findings exist
 
 **What can go wrong:**
 - `FailedScheduling` — Not enough nodes yet (Karpenter is still provisioning)
@@ -138,6 +139,7 @@ After a complete run, the evidence directory contains:
 | `observer.log` | Independent pod count cross-validation data |
 | `agent_context.json` | Context file for AI sub-agent integration |
 | `cl2_summary.json` | ClusterLoader2 results (if CL2 was used) |
+| `scanner_findings.jsonl` | ObservabilityScanner proactive findings (one JSON line per finding) |
 | `findings/*.json` | Anomaly detection findings with evidence |
 | `diagnostics/*.json` | Per-node SSM diagnostic data |
 | `diagnostics/health_sweep.json` | Node health sweep results |
