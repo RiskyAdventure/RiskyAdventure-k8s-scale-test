@@ -1,164 +1,102 @@
-# Implementation Plan: AWS Observability Integration
+# Implementation Plan: AWS Observability Integration via AI Sub-Agent
 
 ## Overview
 
-Incremental implementation of three observability clients, two analysis agents, a post-run reporter, and integration into the existing controller/anomaly detector. Each task builds on the previous, with tests close to implementation. The approach: data models first, then clients, then agents, then integration wiring.
+Incremental implementation of the AI sub-agent observability system. The approach: configuration and data models first, then the ContextFileWriter (core Python component), then evidence store extensions, then controller integration, then Kiro hooks and steering files, then chart integration. Each task builds on the previous, with tests close to implementation.
 
 ## Tasks
 
-- [ ] 1. Add configuration fields and CLI arguments
-  - [ ] 1.1 Add `amp_endpoint`, `cloudwatch_log_group`, and `eks_cluster_name` optional fields to `TestConfig` in `models.py`, defaulting to `None`
+- [x] 1. Add configuration fields and CLI arguments
+  - [x] 1.1 Add `amp_workspace_id`, `cloudwatch_log_group`, and `eks_cluster_name` optional fields to `TestConfig` in `models.py`, defaulting to `None`
+    - _Requirements: 8.1_
+  - [x] 1.2 Add `--amp-workspace-id`, `--cloudwatch-log-group`, and `--eks-cluster-name` arguments to `parse_args()` in `cli.py`, wiring them into `TestConfig` construction in `main()`
+    - _Requirements: 8.2, 8.3, 8.4, 8.5_
+
+- [x] 2. Implement agent finding schema validation
+  - [x] 2.1 Create `src/k8s_scale_test/agent_schema.py` with `validate_agent_finding(data: dict) -> tuple[bool, list[str]]` that checks for required fields (`finding_id`, `timestamp`, `source`, `severity`, `title`, `description`, `affected_resources`, `evidence`, `recommended_actions`) and validates the optional `review` field structure (`confidence`, `reasoning`, `alternative_explanations`, `checkpoint_questions`, `verification_results`)
+    - _Requirements: 6.1, 6.2_
+  - [x] 2.2 Write property test for agent finding schema validation
+    - **Property 6: Agent finding schema validation**
+    - **Validates: Requirements 6.1, 6.2**
+
+- [x] 3. Implement Evidence Store extensions
+  - [x] 3.1 Add `write_agent_context(run_id, context)`, `load_agent_context(run_id)`, and `load_agent_findings(run_id)` methods to `EvidenceStore` in `evidence.py`
+    - `write_agent_context`: writes `agent_context.json` using existing `_write_json` pattern
+    - `load_agent_context`: reads and parses `agent_context.json`, returns `None` if not present
+    - `load_agent_findings`: globs `findings/agent-*.json`, parses each, skips malformed files with `log.warning`, returns list of dicts
+    - _Requirements: 6.3, 6.4, 6.5, 6.6_
+  - [x] 3.2 Write property test for agent findings round-trip
+    - **Property 4: Agent findings round-trip through Evidence Store**
+    - **Validates: Requirements 6.3, 6.4**
+  - [x] 3.3 Write property test for malformed agent findings handling
+    - **Property 5: Malformed agent findings are skipped gracefully**
+    - **Validates: Requirements 6.6, 11.5**
+
+- [x] 4. Implement ContextFileWriter
+  - [x] 4.1 Create `src/k8s_scale_test/agent_context.py` with `ContextFileWriter` class
+    - `__init__(evidence_store, run_id, config)`: stores run dir path, extracts observability config fields
+    - `write_initial_context(namespaces, node_list)`: writes full `agent_context.json` with run_id, test_start, target_pods, namespaces, phase='initializing', observability fields (omitting None values), empty alerts/finding_summaries lists, evidence_dir path
+    - `update_phase(phase, timestamp)`: reads existing context, updates `current_phase` and `phase_start`, writes back
+    - `append_alert(alert)`: reads existing context, appends alert dict to `alerts` list, writes back
+    - `append_finding_summary(finding)`: reads existing context, appends summary dict to `finding_summaries` list, writes back
+    - All methods wrapped in try/except with `log.warning` on failure
+    - _Requirements: 2.1, 2.2, 2.3, 2.4, 2.5, 2.6_
+  - [x] 4.2 Write property test for context file config mapping
+    - **Property 1: Context file correctly maps TestConfig fields**
+    - **Validates: Requirements 2.1, 2.6, 8.2, 8.3, 8.4, 8.5**
+  - [x] 4.3 Write property test for context file phase updates
+    - **Property 2: Context file phase updates are consistent**
+    - **Validates: Requirements 2.2**
+  - [x] 4.4 Write property test for context file appends
+    - **Property 3: Context file appends accumulate correctly**
+    - **Validates: Requirements 2.3, 2.4**
+
+- [x] 5. Checkpoint - Ensure all core module tests pass
+  - Ensure all tests pass, ask the user if questions arise.
+
+- [x] 6. Integrate ContextFileWriter into Controller
+  - [x] 6.1 Modify `ScaleTestController.__init__` in `controller.py` to add `self._ctx_writer: ContextFileWriter | None = None`
+    - _Requirements: 2.1_
+  - [x] 6.2 In `ScaleTestController.run()`, after monitoring setup (Phase 5), create `ContextFileWriter` and call `write_initial_context()` with namespaces and node list. Wrap in try/except, set `_ctx_writer = None` on failure.
+    - _Requirements: 2.1, 2.5, 11.4_
+  - [x] 6.3 In `_execute_scaling_via_flux()`, call `self._ctx_writer.update_phase("scaling", ...)` at the start. In the hold-at-peak section, call `update_phase("hold-at-peak", ...)`. In cleanup, call `update_phase("cleanup", ...)`.
+    - _Requirements: 2.2_
+  - [x] 6.4 In the monitor alert callback path (inside `_safe_callback` or the alert handler), call `self._ctx_writer.append_alert(alert)`. In the anomaly detector finding path, call `self._ctx_writer.append_finding_summary(finding)`.
+    - _Requirements: 2.3, 2.4_
+  - [x] 6.5 In `_make_summary()`, call `self.evidence_store.load_agent_findings(run_id)` and include agent findings in the `TestRunSummary`. Add `agent_findings: Optional[List[Dict]] = None` field to `TestRunSummary` in `models.py`.
     - _Requirements: 9.1_
-  - [ ] 1.2 Add `--amp-endpoint`, `--cloudwatch-log-group`, and `--eks-cluster-name` arguments to `parse_args()` in `cli.py`, wiring them into `TestConfig`
-    - _Requirements: 9.2, 9.3, 9.4, 9.5_
+  - [x] 6.6 Write property test for agent findings in test run summary
+    - **Property 7: Agent findings included in test run summary**
+    - **Validates: Requirements 9.1**
 
-- [ ] 2. Implement AMP Client
-  - [ ] 2.1 Create `src/k8s_scale_test/amp_client.py` with `AMPTimeSeries`, `AMPQueryResult` dataclasses (extending `_SerializableMixin`) and `AMPClient` class
-    - Implement `__init__` accepting optional workspace URL and AWS session
-    - Implement `is_available()` returning False when URL is None
-    - Implement `query_range()` and `query_instant()` using SigV4-signed HTTP requests via `loop.run_in_executor`
-    - Implement pre-built query methods: `get_node_cpu_utilization`, `get_node_memory_utilization`, `get_node_network_bytes`, `get_node_disk_io_utilization`, `get_pod_cpu_by_namespace`, `get_pod_memory_by_namespace`, `get_pod_restarts_by_namespace`
-    - All methods return `AMPQueryResult` with appropriate status, never raise exceptions
-    - _Requirements: 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.7_
-  - [ ]* 2.2 Write property test: AMP query results are well-structured
-    - **Property 1: AMP query results are well-structured**
-    - **Validates: Requirements 1.1, 1.2**
-  - [ ]* 2.3 Write property test: Observability client errors never propagate as exceptions (AMP portion)
-    - **Property 2: Observability client errors never propagate as exceptions**
-    - **Validates: Requirements 1.3**
-  - [ ]* 2.4 Write property test: AMP requests include SigV4 authentication
-    - **Property 3: AMP requests include SigV4 authentication**
-    - **Validates: Requirements 1.6**
-  - [ ]* 2.5 Write property test: Unconfigured clients return unavailable status (AMP portion)
-    - **Property 4: Unconfigured clients return unavailable status**
-    - **Validates: Requirements 1.7**
+- [x] 7. Create Kiro steering file
+  - [x] 7.1 Create `.kiro/steering/scale-test-observability.md` with sections for: EKS scale test context, AMP metric patterns, CloudWatch log patterns, EKS cluster context, Agent Finding JSON schema (including review field), investigation strategies, and skeptical review process
+    - _Requirements: 7.1, 7.2, 7.3, 7.4, 7.5, 7.6, 7.7_
 
-- [ ] 3. Implement CloudWatch Logs Client
-  - [ ] 3.1 Create `src/k8s_scale_test/cloudwatch_client.py` with `CWLQueryResult` dataclass (extending `_SerializableMixin`) and `CloudWatchLogsClient` class
-    - Implement `__init__` accepting optional log group, AWS session, and query timeout
-    - Implement `is_available()` returning False when log group is None
-    - Implement `run_insights_query()` with StartQuery, exponential backoff polling (0.5s base, 5s max), timeout cancellation via StopQuery
-    - Implement pre-built queries: `get_kubelet_errors`, `get_containerd_errors`, `get_ipamd_exhaustion`, `get_oom_events`, `get_node_errors`
-    - All boto3 calls via `loop.run_in_executor`, all methods return `CWLQueryResult`, never raise exceptions
-    - _Requirements: 2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 2.7_
-  - [ ]* 3.2 Write property test: CloudWatch Logs polling uses exponential backoff
-    - **Property 8: CloudWatch Logs polling uses exponential backoff**
-    - **Validates: Requirements 2.7**
-  - [ ]* 3.3 Write property test: CloudWatch Logs query timeout triggers cancellation
-    - **Property 6: CloudWatch Logs query timeout triggers cancellation**
-    - **Validates: Requirements 2.3**
-  - [ ]* 3.4 Write property test: CloudWatch Logs node-specific queries filter by hostname
-    - **Property 7: CloudWatch Logs node-specific queries filter by hostname**
-    - **Validates: Requirements 2.5**
-  - [ ]* 3.5 Write property test: Unconfigured clients return unavailable status (CWL portion)
-    - **Property 4: Unconfigured clients return unavailable status**
-    - **Validates: Requirements 2.6**
-
-- [ ] 4. Implement EKS API Client
-  - [ ] 4.1 Create `src/k8s_scale_test/eks_client.py` with `EKSAddonInfo`, `EKSClusterInfo` dataclasses (extending `_SerializableMixin`) and `EKSAPIClient` class
-    - Implement `__init__` accepting optional cluster name and AWS session
-    - Implement `is_available()` returning False when cluster name is None
-    - Implement `get_cluster_info()` calling DescribeCluster + ListAddons + DescribeAddon per addon, all via `loop.run_in_executor`
-    - Return `EKSClusterInfo` with error_message on failure, never raise exceptions
+- [x] 8. Create Kiro hook files
+  - [x] 8.1 Create `.kiro/hooks/scale-test-proactive-scan.md` with file_change trigger on `agent_context.json` (phase is scaling or hold-at-peak), `askAgent` action with prompt instructing the agent to read context, scan AMP via Prometheus MCP tools, and write findings
     - _Requirements: 3.1, 3.2, 3.3, 3.4_
-  - [ ]* 4.2 Write property test: EKS cluster info contains all required fields
-    - **Property 9: EKS cluster info contains all required fields**
-    - **Validates: Requirements 3.1, 3.2**
-  - [ ]* 4.3 Write property test: Observability client errors never propagate as exceptions (EKS portion)
-    - **Property 2: Observability client errors never propagate as exceptions**
-    - **Validates: Requirements 3.3**
+  - [x] 8.2 Create `.kiro/hooks/scale-test-reactive-investigation.md` with file_change trigger on `agent_context.json` (new alert entries), `askAgent` action with prompt instructing the agent to investigate using all three MCP servers, correlate findings, and write investigation report
+    - _Requirements: 4.1, 4.2, 4.3, 4.4, 4.5_
+  - [x] 8.3 Create `.kiro/hooks/scale-test-skeptical-review.md` with file_change trigger on `findings/agent-*.json` (new finding without review field), `askAgent` action with prompt instructing the agent to independently verify claims, assign confidence, list alternatives, write checkpoint questions, and append review field to finding
+    - _Requirements: 5.1, 5.2, 5.3, 5.4, 5.5, 5.6, 5.7_
 
-- [ ] 5. Checkpoint - Ensure all client tests pass
+- [x] 9. Create MCP server configuration documentation
+  - [x] 9.1 Create `.kiro/docs/mcp-server-setup.md` documenting the three MCP server entries to add to `~/.kiro/settings/mcp.json`: `awslabs.prometheus-mcp-server`, `awslabs.cloudwatch-mcp-server`, `awslabs.eks-mcp-server` with their environment variables
+    - _Requirements: 1.1, 1.2, 1.3, 1.4_
+
+- [x] 10. Checkpoint - Ensure all integration tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
-- [ ] 6. Implement Metrics Analyzer Agent
-  - [ ] 6.1 Create `src/k8s_scale_test/metrics_agent.py` with `NodeResourceSummary`, `MetricsAnalysisSummary` dataclasses (extending `_SerializableMixin`) and `MetricsAnalyzerAgent` class
-    - Implement `__init__` accepting `AMPClient` and `EvidenceStore`
-    - Implement `run()` that queries AMP for CPU, memory, network, disk metrics, computes fleet averages, identifies threshold violations (CPU > 80%, memory > 85%), ranks by severity, limits to top 10, persists summary to evidence store as `metrics_analysis.json`
-    - Return `MetricsAnalysisSummary` with status "unavailable" when AMP is not configured
-    - _Requirements: 4.1, 4.2, 4.3, 4.4, 4.6_
-  - [ ]* 6.2 Write property test: Metrics agent correctly identifies threshold violations and ranks by severity
-    - **Property 10: Metrics agent correctly identifies threshold violations and ranks by severity**
-    - **Validates: Requirements 4.2, 4.3**
-  - [ ]* 6.3 Write property test: Analysis summary serialization round-trip (MetricsAnalysisSummary)
-    - **Property 16: Analysis summary serialization round-trip**
-    - **Validates: Requirements 4.6**
+- [x] 11. Enhance chart with agent finding markers
+  - [x] 11.1 Modify `generate_chart()` in `chart.py` to load `agent-*.json` files from the findings directory, and render them as vertical annotation lines on the Chart.js time axis (color-coded by severity: info=blue, warning=orange, critical=red) with tooltips showing finding title, description, and review confidence level
+    - If no agent findings exist, skip the annotation section entirely
+    - _Requirements: 9.1, 9.2, 9.3_
+  - [x] 11.2 Write property test for chart agent finding markers
+    - **Property 8: Chart renders agent finding markers when findings exist**
+    - **Validates: Requirements 9.2, 9.3**
 
-- [ ] 7. Implement Log Analyzer Agent
-  - [ ] 7.1 Create `src/k8s_scale_test/log_agent.py` with `LogErrorGroup`, `LogAnalysisSummary` dataclasses (extending `_SerializableMixin`) and `LogAnalyzerAgent` class
-    - Implement `__init__` accepting `CloudWatchLogsClient` and `EvidenceStore`
-    - Implement `run()` that queries CWL for kubelet errors, containerd errors, IPAMD exhaustion, OOM events, groups by source, ranks by frequency, detects IPAMD exhaustion nodes, persists summary to evidence store as `log_analysis.json`
-    - Return `LogAnalysisSummary` with status "unavailable" when CWL is not configured
-    - _Requirements: 5.1, 5.2, 5.3, 5.4, 5.5_
-  - [ ]* 7.2 Write property test: Log agent correctly groups errors by source
-    - **Property 11: Log agent correctly groups errors by source**
-    - **Validates: Requirements 5.2**
-  - [ ]* 7.3 Write property test: Log agent detects IPAMD exhaustion nodes
-    - **Property 12: Log agent detects IPAMD exhaustion nodes**
-    - **Validates: Requirements 5.3**
-
-- [ ] 8. Implement Post-Run Reporter
-  - [ ] 8.1 Create `src/k8s_scale_test/post_run_reporter.py` with `ObservabilityReport` dataclass (extending `_SerializableMixin`) and `PostRunReporter` class
-    - Implement `__init__` accepting all three clients and `EvidenceStore`
-    - Implement `generate()` that runs MetricsAnalyzerAgent, LogAnalyzerAgent, and EKS cluster info query concurrently via `asyncio.gather`, correlates with existing findings, persists report as `observability_report.json`
-    - Handle partial availability: classify sources as available/unavailable, set status to "complete" or "partial"
-    - _Requirements: 6.1, 6.2, 6.3, 6.4_
-  - [ ]* 8.2 Write property test: Post-run reporter handles partial source availability
-    - **Property 13: Post-run reporter handles partial source availability**
-    - **Validates: Requirements 6.2, 6.3**
-
-- [ ] 9. Checkpoint - Ensure all agent tests pass
-  - Ensure all tests pass, ask the user if questions arise.
-
-- [ ] 10. Integrate observability into Anomaly Detector
-  - [ ] 10.1 Modify `AnomalyDetector.__init__` in `anomaly.py` to accept optional `amp_client` and `cwl_client` parameters
-    - _Requirements: 7.4, 8.4_
-  - [ ] 10.2 Add Layer 7 (AMP metrics) and Layer 8 (CloudWatch Logs) to `handle_alert()` in `anomaly.py`
-    - Query AMP for CPU/memory metrics on stuck pod nodes (from `targets` list)
-    - Query CWL for recent errors on stuck pod nodes
-    - Run new queries concurrently with existing evidence collection via `asyncio.gather`
-    - Add "amp:" and "cwl:" prefixed entries to `evidence_references`
-    - Wrap each new layer in try/except, log failures, continue with remaining layers
-    - _Requirements: 7.1, 7.2, 7.3_
-  - [ ]* 10.3 Write property test: Anomaly detector includes observability evidence when configured
-    - **Property 14: Anomaly detector includes observability evidence when configured**
-    - **Validates: Requirements 7.1, 7.2**
-  - [ ]* 10.4 Write property test: Anomaly detector produces valid findings despite observability failures
-    - **Property 15: Anomaly detector produces valid findings despite observability failures**
-    - **Validates: Requirements 7.3, 7.4**
-
-- [ ] 11. Integrate observability into Controller lifecycle
-  - [ ] 11.1 Modify `ScaleTestController.__init__` and `run()` in `controller.py` to create observability clients from TestConfig
-    - Create `AMPClient`, `CloudWatchLogsClient`, `EKSAPIClient` during monitoring setup (Phase 5)
-    - Pass `amp_client` and `cwl_client` to `AnomalyDetector` constructor
-    - Wrap client creation in try/except, log warning and set to None on failure
-    - _Requirements: 8.1, 8.4, 8.5_
-  - [ ] 11.2 Add Metrics_Analyzer_Agent and Log_Analyzer_Agent to hold-at-peak phase in `controller.py`
-    - Create `MetricsAnalyzerAgent` and `LogAnalyzerAgent` instances
-    - Run them concurrently with `HealthSweepAgent` via `asyncio.gather` during hold-at-peak
-    - Store results for post-run reporter
-    - _Requirements: 8.2_
-  - [ ] 11.3 Add Post-Run Reporter invocation after cleanup in `controller.py`
-    - Create `PostRunReporter` and call `generate()` after `_cleanup_pods` and before chart generation
-    - Pass existing findings list for correlation
-    - _Requirements: 8.3_
-
-- [ ] 12. Enhance chart with AMP metrics
-  - [ ] 12.1 Modify `generate_chart()` in `chart.py` to load `metrics_analysis.json` from the run directory and render fleet CPU/memory utilization as additional Chart.js time-series plots
-    - Check if `metrics_analysis.json` exists; if not, skip the section
-    - Add a new canvas element and Chart.js scatter plot for CPU and memory utilization over time, aligned to the same time axis
-    - _Requirements: 11.1, 11.2, 11.3_
-  - [ ]* 12.2 Write property test: Chart includes resource utilization section when AMP data exists
-    - **Property 17: Chart includes resource utilization section when AMP data exists**
-    - **Validates: Requirements 11.1**
-
-- [ ] 13. Add Evidence Store persistence methods
-  - [ ] 13.1 Add `save_metrics_analysis`, `save_log_analysis`, and `save_observability_report` methods to `EvidenceStore` in `evidence.py`
-    - Follow existing pattern: accept run_id and dataclass, write JSON to run directory
-    - Add corresponding `load_` methods for post-run access
-    - _Requirements: 4.6, 5.5, 6.4_
-
-- [ ] 14. Final checkpoint - Ensure all tests pass
+- [x] 12. Final checkpoint - Ensure all tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
 ## Notes
@@ -168,4 +106,6 @@ Incremental implementation of three observability clients, two analysis agents, 
 - Checkpoints ensure incremental validation
 - Property tests validate universal correctness properties
 - Unit tests validate specific examples and edge cases
-- All new modules follow existing patterns: async with `run_in_executor`, `_SerializableMixin` for dataclasses, graceful degradation when unconfigured
+- The Python tool changes are minimal — most of the "intelligence" lives in the Kiro hooks and steering file, not in Python code
+- The ContextFileWriter is the only new Python module; everything else is extensions to existing modules
+- Hook and steering files are markdown — no compilation or testing needed, but they should be reviewed for prompt quality

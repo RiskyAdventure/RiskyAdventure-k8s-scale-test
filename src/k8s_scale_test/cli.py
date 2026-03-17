@@ -45,6 +45,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
                    help="Memory limit as multiplier of request (default: 1.5)")
     p.add_argument("--iperf3-server-ratio", type=int, default=50,
                    help="Number of client pods per iperf3 server (default: 50)")
+    p.add_argument("--amp-workspace-id", type=str, default=None,
+                   help="AMP workspace ID for Prometheus MCP server")
+    p.add_argument("--cloudwatch-log-group", type=str, default=None,
+                   help="CloudWatch log group for node logs")
+    p.add_argument("--eks-cluster-name", type=str, default=None,
+                   help="EKS cluster name for EKS MCP server")
     return p.parse_args(argv)
 
 
@@ -94,6 +100,9 @@ def main(argv: list[str] | None = None) -> None:
         cpu_limit_multiplier=args.cpu_limit_multiplier,
         memory_limit_multiplier=args.memory_limit_multiplier,
         iperf3_server_ratio=args.iperf3_server_ratio,
+        amp_workspace_id=args.amp_workspace_id,
+        cloudwatch_log_group=args.cloudwatch_log_group,
+        eks_cluster_name=args.eks_cluster_name,
     )
 
     evidence_store = EvidenceStore(config.output_dir)

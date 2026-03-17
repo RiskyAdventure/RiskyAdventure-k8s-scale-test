@@ -9,6 +9,7 @@ import os
 from datetime import datetime, timezone
 from typing import Optional
 
+from k8s_scale_test.agent_context import ContextFileWriter
 from k8s_scale_test.anomaly import AnomalyDetector
 from k8s_scale_test.cl2_parser import CL2ResultParser
 from k8s_scale_test.diagnostics import NodeDiagnosticsCollector
@@ -57,6 +58,7 @@ class ScaleTestController:
         self._namespaces: list[str] = []
         self._health_sweep: dict = {}
         self._karpenter_health: dict = {}
+        self._ctx_writer: ContextFileWriter | None = None
 
     async def run(self) -> TestRunSummary:
         """Execute the full test lifecycle.
@@ -224,6 +226,21 @@ class ScaleTestController:
         monitor.on_alert(anomaly.handle_alert)
         watcher = EventWatcher(self.k8s_client, namespaces, self.evidence_store)
 
+        # 5a. Set up agent context writer for AI sub-agent integration
+        try:
+            node_list: list[str] = []
+            try:
+                v1 = self.k8s_client.CoreV1Api()
+                nodes = v1.list_node(watch=False, _request_timeout=10)
+                node_list = [n.metadata.name for n in nodes.items]
+            except Exception:
+                log.debug("Could not fetch node list for agent context")
+            self._ctx_writer = ContextFileWriter(self.evidence_store, run_id, self.config)
+            self._ctx_writer.write_initial_context(namespaces, node_list)
+        except Exception as exc:
+            log.warning("Failed to initialize agent context writer: %s", exc)
+            self._ctx_writer = None
+
         # 6. Start watchers
         await watcher.start(run_id, lambda: self._current_step)
         await monitor.start()
@@ -251,6 +268,8 @@ class ScaleTestController:
 
             # 7a. Hold at peak + node health sweep + Karpenter check
             # All run concurrently during the hold period
+            if self._ctx_writer:
+                self._ctx_writer.update_phase("hold-at-peak", datetime.now(timezone.utc))
             log.info("Holding at peak for %ds + running health checks...", hold)
             health_sweep_task = asyncio.create_task(sweep_agent.run(sample_size=10))
             hold_task = asyncio.create_task(asyncio.sleep(hold))
@@ -287,6 +306,8 @@ class ScaleTestController:
         self._karpenter_health = await infra_agent.check_if_needed(self._findings)
 
         # 8. Cleanup pods — delete replicas and record delete rate
+        if self._ctx_writer:
+            self._ctx_writer.update_phase("cleanup", datetime.now(timezone.utc))
         await self._cleanup_pods(writer, all_labeled)
 
         # 8a. Collect CL2 result (if running concurrently)
@@ -475,6 +496,10 @@ class ScaleTestController:
         timeout = self.config.pending_timeout_seconds
         self._current_step = 1
 
+        # Update agent context to scaling phase
+        if self._ctx_writer:
+            self._ctx_writer.update_phase("scaling", datetime.now(timezone.utc))
+
         # Set full target in one commit
         results = writer.set_replicas_batch(targets)
         failed = [n for n, ok in results.items() if not ok]
@@ -524,8 +549,12 @@ class ScaleTestController:
                     message=f"Timeout: {pending} pods pending after {elapsed:.0f}s",
                     context={"pending": pending, "ready": ready, "step": 1},
                 )
+                if self._ctx_writer:
+                    self._ctx_writer.append_alert(alert)
                 finding = await anomaly.handle_alert(alert)
                 self._findings.append(finding)
+                if self._ctx_writer:
+                    self._ctx_writer.append_finding_summary(finding)
                 if finding.severity == Severity.CRITICAL:
                     await self._prompt_operator(
                         f"Critical finding at timeout", {"finding": finding.finding_id})
@@ -624,8 +653,12 @@ class ScaleTestController:
                 message=f"Diagnostics: {pending} pods pending",
                 context={"pending": pending, "ready": ready, "step": 1, "namespaces": namespaces},
             )
+            if self._ctx_writer:
+                self._ctx_writer.append_alert(alert)
             finding = await anomaly.handle_alert(alert)
             self._findings.append(finding)
+            if self._ctx_writer:
+                self._ctx_writer.append_finding_summary(finding)
             if finding.k8s_events:
                 warnings = [e for e in finding.k8s_events if e.event_type == "Warning"]
                 if warnings:
@@ -864,6 +897,7 @@ class ScaleTestController:
         validity, reason = self._classify_run_validity(
             result, self._findings, self.config.target_pods,
         )
+        agent_findings = self.evidence_store.load_agent_findings(run_id) or None
         return TestRunSummary(
             run_id=run_id, start_time=start, end_time=end,
             duration_seconds=(end - start).total_seconds(),
@@ -877,6 +911,7 @@ class ScaleTestController:
             validity=validity, validity_reason=reason,
             node_health_sweep=self._health_sweep or None,
             karpenter_health=self._karpenter_health or None,
+            agent_findings=agent_findings,
         )
 
     # ------------------------------------------------------------------

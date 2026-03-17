@@ -1,0 +1,13 @@
+{
+  "name": "Scale Test Proactive AMP Scan",
+  "version": "1.0.0",
+  "description": "Triggers a proactive AMP scan when the agent context file indicates the test is in the scaling or hold-at-peak phase. The agent scans fleet-wide Prometheus metrics for emerging issues before they cause rate drops.",
+  "when": {
+    "type": "fileEdited",
+    "patterns": ["**/agent_context.json"]
+  },
+  "then": {
+    "type": "askAgent",
+    "prompt": "The agent_context.json file has been updated. Read it to determine the current test phase.\n\nIf the current_phase is NOT 'scaling' or 'hold-at-peak', stop — no proactive scan is needed outside these phases.\n\nIf the phase IS 'scaling' or 'hold-at-peak', perform a proactive AMP scan:\n\n1. READ CONTEXT: Read agent_context.json from the evidence_dir path. Note the amp_workspace_id, namespaces, phase_start timestamp, and any existing finding_summaries (to avoid duplicating work).\n\n2. SCAN AMP METRICS: Use the Prometheus MCP server tools (ExecuteQuery, ExecuteRangeQuery, ListMetrics) to scan for fleet-wide anomalies. Look for emerging issues without hardcoded thresholds — reason about what's abnormal given the test phase:\n   - Rising CPU or memory pressure across nodes\n   - Network error counters increasing (IP allocation failures, DNS latency)\n   - Disk I/O saturation or inode exhaustion\n   - Pod restart spikes or containers stuck in creation\n   - System component stress (aws-node/IPAMD, kube-proxy, CoreDNS)\n   - Metrics diverging across availability zones\n   - Resource utilization plateauing while pods are still being created\n\n3. SCOPE QUERIES: Use the phase_start timestamp to scope your queries. Don't query the last 24 hours — focus on the current phase window. Use step intervals appropriate to the window length (15s for short windows, 60s for longer).\n\n4. WRITE FINDINGS: If you find anything concerning, write each finding as a separate JSON file at {evidence_dir}/findings/agent-proactive-{timestamp}.json following the Agent Finding schema defined in the steering file. Focus on issues that could cause pod ready rate drops. Set severity based on impact potential:\n   - info: observation worth noting, not immediately actionable\n   - warning: issue that could escalate if not addressed\n   - critical: active issue causing or about to cause rate drops\n\n5. CAPTURE EVIDENCE: Time is critical — signal disappears after cleanup. Record the exact queries you ran, what they returned, and your interpretation. Include affected resource names (node hostnames, pod names) in the finding.\n\nRefer to the scale-test-observability steering file for domain knowledge about EKS scale test metric patterns and the exact Agent Finding JSON schema."
+  }
+}

@@ -156,6 +156,46 @@ def generate_chart(run_dir: str, steps: list[dict] | None = None) -> str:
     result_label = "PASSED" if reached_target else "FAILED"
     validity_display = "success" if reached_target else f"reached {peak_ready:,}/{target:,}"
 
+    # Load agent findings for annotation markers
+    findings_dir = rd / "findings"
+    agent_findings = []
+    if findings_dir.exists():
+        for f in sorted(findings_dir.glob("agent-*.json")):
+            try:
+                agent_findings.append(json.loads(f.read_text()))
+            except Exception:
+                pass
+
+    # Convert agent finding timestamps to chart-relative seconds
+    severity_colors = {"info": "#3498db", "warning": "#f39c12", "critical": "#e74c3c"}
+    finding_annotations = []
+    if agent_findings and chart_origin:
+        from datetime import datetime as _dtf
+        _origin_dt = _dtf.fromisoformat(chart_origin) if isinstance(chart_origin, str) else chart_origin
+        for af in agent_findings:
+            af_ts = af.get("timestamp", "")
+            if not af_ts:
+                continue
+            try:
+                af_dt = _dtf.fromisoformat(af_ts)
+                af_sec = max(0, (af_dt - _origin_dt).total_seconds())
+                sev = af.get("severity", "info")
+                color = severity_colors.get(sev, "#3498db")
+                title = af.get("title", "Agent Finding")
+                desc = af.get("description", "")[:120]
+                review = af.get("review", {})
+                confidence = review.get("confidence", "") if review else ""
+                finding_annotations.append({
+                    "x": round(af_sec, 1),
+                    "color": color,
+                    "severity": sev,
+                    "title": title,
+                    "description": desc,
+                    "confidence": confidence,
+                })
+            except Exception:
+                pass
+
     # Load warning events — filter out expected transient noise
     events_file = rd / "events.jsonl"
     TRANSIENT_REASONS = {"FailedScheduling", "InvalidDiskCapacity"}  # expected during provisioning
@@ -279,6 +319,7 @@ def generate_chart(run_dir: str, steps: list[dict] | None = None) -> str:
 <html><head><meta charset="utf-8">
 <title>Scale Test — {run_id}</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3"></script>
 <style>
 body {{ font-family: -apple-system, sans-serif; margin: 20px; background: #1a1a2e; color: #eee; }}
 .chart-box {{ background: #16213e; border-radius: 8px; padding: 20px; margin-bottom: 20px; }}
@@ -354,6 +395,37 @@ const totalData = ts.map((t, i) => ({{x: t, y: total[i]}}));
 const rateColors = gaps.map(g => g ? 'rgba(255,165,0,0.6)' : '#e94560');
 const rateRadii = gaps.map(g => g ? 5 : 2);
 const rateYMax = {json.dumps(rate_y_max)};
+const findingAnnotations = {json.dumps(finding_annotations)};
+"""
+
+    # Build annotation config JS block if findings exist
+    if finding_annotations:
+        html += """
+const annotationLines = {};
+findingAnnotations.forEach((fa, i) => {
+  annotationLines['finding' + i] = {
+    type: 'line',
+    xMin: fa.x,
+    xMax: fa.x,
+    borderColor: fa.color,
+    borderWidth: 2,
+    borderDash: [6, 3],
+    label: {
+      display: true,
+      content: fa.severity.toUpperCase(),
+      position: 'start',
+      backgroundColor: fa.color,
+      color: '#fff',
+      font: { size: 9, weight: 'bold' },
+      padding: 3
+    }
+  };
+});
+const annotationConfig = { annotations: annotationLines };
+"""
+    else:
+        html += """
+const annotationConfig = {};
 """
 
     html += """
@@ -373,6 +445,7 @@ new Chart(document.getElementById('rateChart'), {
     plugins: {
       title: { display: true, text: 'Pod Ready Rate Over Time', color: '#eee' },
       legend: { labels: { color: '#ccc' } },
+      annotation: annotationConfig,
       tooltip: {
         callbacks: {
           afterLabel: function(ctx) {
@@ -407,7 +480,8 @@ new Chart(document.getElementById('countChart'), {
     responsive: true,
     plugins: {
       title: { display: true, text: 'Pod Counts Over Time', color: '#eee' },
-      legend: { labels: { color: '#ccc' } }
+      legend: { labels: { color: '#ccc' } },
+      annotation: annotationConfig
     },
     scales: {
       x: { type: 'linear', title: { display: true, text: 'Seconds', color: '#aaa' },
@@ -417,7 +491,37 @@ new Chart(document.getElementById('countChart'), {
   }
 });
 </script>
-""" + error_table + """
+"""
+
+    # Build agent findings HTML table
+    agent_findings_html = ""
+    if finding_annotations:
+        af_rows = ""
+        for af in agent_findings:
+            sev = af.get("severity", "info")
+            sev_color = severity_colors.get(sev, "#3498db")
+            title = af.get("title", "")
+            desc = af.get("description", "")[:200]
+            review = af.get("review", {})
+            confidence = review.get("confidence", "—") if review else "—"
+            af_rows += (
+                f"<tr>"
+                f"<td style='color:{sev_color};font-weight:bold'>{sev.upper()}</td>"
+                f"<td>{title}</td>"
+                f"<td style='color:#999;font-size:12px'>{desc}</td>"
+                f"<td>{confidence}</td>"
+                f"</tr>\n"
+            )
+        agent_findings_html = f"""<div class="chart-box">
+<h2 style="color:#3498db;margin-top:0">Agent Findings</h2>
+<table>
+<tr><th style="text-align:left">Severity</th><th style="text-align:left">Title</th><th style="text-align:left">Description</th><th>Confidence</th></tr>
+{af_rows}
+</table>
+</div>
+"""
+
+    html += agent_findings_html + error_table + """
 
 </body></html>"""
 

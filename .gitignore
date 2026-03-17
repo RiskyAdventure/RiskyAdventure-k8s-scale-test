@@ -27,3 +27,6 @@ flux2/apps/base/nginx/
 flux2/apps/base/spark/
 flux2/apps/base/stress-test/
 flux2/apps/base/ack-clusters/
+
+# Hypothesis PBT cache
+.hypothesis/

@@ -159,6 +159,9 @@ class TestConfig(_SerializableMixin):
     cpu_limit_multiplier: float = 2.0
     memory_limit_multiplier: float = 1.5
     iperf3_server_ratio: int = 50
+    amp_workspace_id: Optional[str] = None
+    cloudwatch_log_group: Optional[str] = None
+    eks_cluster_name: Optional[str] = None
 
 
 # ---------------------------------------------------------------------------
@@ -433,6 +436,7 @@ class TestRunSummary(_SerializableMixin):
     validity_reason: str
     node_health_sweep: Optional[Dict] = None
     karpenter_health: Optional[Dict] = None
+    agent_findings: Optional[List[Dict]] = None
 
 
 # ---------------------------------------------------------------------------

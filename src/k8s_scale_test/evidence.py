@@ -87,6 +87,38 @@ class EvidenceStore:
         """Save CL2 results as cl2_summary.json in the run directory."""
         self._write_json(self._run_dir(run_id) / "cl2_summary.json", summary.to_dict())
 
+    def write_agent_context(self, run_id: str, context: dict) -> None:
+        """Write agent_context.json to the run directory."""
+        self._write_json(self._run_dir(run_id) / "agent_context.json", context)
+
+    def load_agent_context(self, run_id: str) -> dict | None:
+        """Load agent_context.json if it exists. Returns None if not present."""
+        path = self._run_dir(run_id) / "agent_context.json"
+        if not path.exists():
+            return None
+        try:
+            return json.loads(path.read_text())
+        except Exception as exc:
+            log.warning("Failed to load agent context from %s: %s", path, exc)
+            return None
+
+    def load_agent_findings(self, run_id: str) -> list[dict]:
+        """Load all agent-*.json files from findings/ directory.
+
+        Skips malformed files with a warning log. Returns list of parsed dicts.
+        """
+        findings_dir = self._run_dir(run_id) / "findings"
+        if not findings_dir.exists():
+            return []
+        results: list[dict] = []
+        for f in sorted(findings_dir.glob("agent-*.json")):
+            try:
+                results.append(json.loads(f.read_text()))
+            except Exception as exc:
+                log.warning("Skipping malformed agent finding %s: %s", f, exc)
+        return results
+
+
     def load_cl2_summary(self, run_id: str):
         """Load CL2 summary if it exists. Returns None if not present."""
         import json as _json

@@ -1,558 +1,651 @@
-# Design Document: AWS Observability Integration
+# Design Document: AWS Observability Integration via AI Sub-Agent
 
 ## Overview
 
-This design adds three AWS observability client modules (AMP, CloudWatch Logs, EKS API), two analysis agents (Metrics Analyzer, Log Analyzer), and a Post-Run Reporter to the existing scale test tool. The integration follows the tool's established patterns: all network I/O runs in thread executors or background asyncio tasks, evidence is persisted to the EvidenceStore in JSON, and every new component degrades gracefully when its backing service is unconfigured.
+This design replaces the current static diagnostics approach (hardcoded SSM commands on 3 nodes) with an AI sub-agent that uses MCP servers to dynamically investigate fleet-wide observability data during EKS scale tests. The architecture has three layers:
 
-The key architectural insight is that these observability sources fill specific gaps in the current evidence pipeline:
+1. **Python tool (writer)** — The existing controller writes a `agent_context.json` file to the evidence store during the test lifecycle. This file contains everything the agent needs: run ID, timestamps, namespaces, node lists, alerts, and AWS resource identifiers (AMP workspace ID, CloudWatch log group, EKS cluster name). The Python tool's changes are minimal — it writes context and reads findings.
 
-1. **AMP fills the fleet-wide metrics gap.** The current tool gets per-node resource data only via SSM (3 nodes max during anomaly investigation) or metrics-server (point-in-time, no history). AMP provides continuous time-series across all 200+ nodes — CPU, memory, network, disk — so the anomaly detector can see fleet-wide trends, not just spot-checks.
+2. **Kiro hooks + steering (orchestration)** — Hook files trigger the AI sub-agent at key moments: proactively during scaling/hold-at-peak, and reactively when alerts appear. A steering file provides domain knowledge about EKS scale test observability patterns. The hooks use `askAgent` action type to invoke the agent with prompts that reference the context file.
 
-2. **CloudWatch Logs fills the log correlation gap.** Currently, kubelet/containerd logs are collected via SSM on investigated nodes only. CloudWatch Logs Insights can query across the entire fleet in seconds, finding patterns like "IPAMD datastore exhaustion on 47 nodes" without touching SSM.
+3. **AI sub-agent + MCP servers (investigator)** — The Kiro agent reads the context file, uses the three MCP servers (Prometheus, CloudWatch, EKS) as tools to query observability data, reasons about what it finds, and writes structured findings as JSON files to the evidence store. The agent decides what PromQL to run, what logs to search, and what EKS state to check — no hardcoded queries.
 
-3. **EKS API fills the control plane gap.** The tool checks Karpenter pod health but has no visibility into EKS control plane status, addon health, or platform version. The EKS API provides this context for the post-run report.
+4. **Skeptical review agent (verifier)** — A second agent hook triggers after the investigation agent writes a finding. This agent independently re-queries MCP servers to verify key claims, checks source code and documentation for context, assigns a confidence level, lists alternative explanations, and writes checkpoint questions when confidence is below "high". This prevents runaway analysis where an early mistake propagates through subsequent reasoning steps. The review is appended to the finding as a `review` field before it reaches the operator.
+
+The key insight: the agent runs in Kiro's separate agent loop, completely decoupled from the Python tool's asyncio event loop. The context file is the only interface. This means the monitor ticker (5-second loop) is never blocked, and the agent can take as long as it needs to investigate.
 
 ## Architecture
 
 ```mermaid
 graph TB
-    subgraph "Existing Components"
+    subgraph "Python Tool (src/k8s_scale_test/)"
         Controller["Controller<br/>(controller.py)"]
         Monitor["PodRateMonitor<br/>(monitor.py)"]
         Anomaly["AnomalyDetector<br/>(anomaly.py)"]
-        Events["EventWatcher<br/>(events.py)"]
-        HealthSweep["HealthSweepAgent<br/>(health_sweep.py)"]
-        InfraHealth["InfraHealthAgent<br/>(infra_health.py)"]
-        NodeDiag["NodeDiagnosticsCollector<br/>(diagnostics.py)"]
         Evidence["EvidenceStore<br/>(evidence.py)"]
         Chart["Chart Generator<br/>(chart.py)"]
+        CtxWriter["ContextFileWriter<br/>(agent_context.py)"]
     end
 
-    subgraph "New: Observability Clients"
-        AMP["AMP_Client<br/>(amp_client.py)"]
-        CWL["CloudWatch_Logs_Client<br/>(cloudwatch_client.py)"]
-        EKS["EKS_API_Client<br/>(eks_client.py)"]
+    subgraph "Evidence Store (Disk)"
+        CtxFile["agent_context.json"]
+        AgentFindings["findings/agent-*.json"]
+        RateData["rate_data.jsonl"]
+        Summary["summary.json"]
     end
 
-    subgraph "New: Analysis Agents"
-        MetricsAgent["Metrics_Analyzer_Agent<br/>(metrics_agent.py)"]
-        LogAgent["Log_Analyzer_Agent<br/>(log_agent.py)"]
-        PostRun["Post_Run_Reporter<br/>(post_run_reporter.py)"]
+    subgraph "Kiro Agent Loop (Separate Process)"
+        Hooks["Kiro Hooks<br/>(.kiro/hooks/)"]
+        Steering["Steering File<br/>(.kiro/steering/)"]
+        Agent["Kiro AI Agent<br/>(Investigation)"]
+        ReviewAgent["Kiro AI Agent<br/>(Skeptical Review)"]
     end
 
-    Controller --> AMP
-    Controller --> CWL
-    Controller --> EKS
-    Controller --> MetricsAgent
-    Controller --> LogAgent
-    Controller --> PostRun
+    subgraph "MCP Servers"
+        PromMCP["awslabs.prometheus-mcp-server<br/>ExecuteQuery, ExecuteRangeQuery,<br/>ListMetrics, GetAvailableWorkspaces"]
+        CWMCP["awslabs.cloudwatch-mcp-server<br/>execute_log_insights_query,<br/>get_logs_insight_query_results,<br/>analyze_log_group, get_metric_data"]
+        EKSMCP["awslabs.eks-mcp-server<br/>get_cloudwatch_logs, get_pod_logs,<br/>get_k8s_events, list_k8s_resources,<br/>get_eks_insights"]
+    end
 
-    Anomaly --> AMP
-    Anomaly --> CWL
+    Controller --> CtxWriter
+    Monitor -->|rate drop alert| CtxWriter
+    Anomaly -->|finding summary| CtxWriter
+    CtxWriter -->|writes| CtxFile
 
-    MetricsAgent --> AMP
-    LogAgent --> CWL
-    PostRun --> AMP
-    PostRun --> CWL
-    PostRun --> EKS
+    Hooks -->|reads| CtxFile
+    Hooks -->|askAgent| Agent
+    Hooks -->|askAgent| ReviewAgent
+    Steering -->|guides| Agent
+    Steering -->|guides| ReviewAgent
 
-    MetricsAgent --> Evidence
-    LogAgent --> Evidence
-    PostRun --> Evidence
-    Chart -.-> Evidence
+    Agent -->|queries| PromMCP
+    Agent -->|queries| CWMCP
+    Agent -->|queries| EKSMCP
+    Agent -->|writes| AgentFindings
+
+    ReviewAgent -->|reads & annotates| AgentFindings
+    ReviewAgent -->|verifies via| PromMCP
+    ReviewAgent -->|verifies via| CWMCP
+    ReviewAgent -->|verifies via| EKSMCP
+
+    Controller -->|reads| AgentFindings
+    Chart -->|reads| AgentFindings
+    Evidence -->|manages| CtxFile
+    Evidence -->|manages| AgentFindings
 ```
 
 ### Lifecycle Integration
 
-The observability components hook into the controller's existing lifecycle phases:
+The context file writer hooks into the controller's existing lifecycle phases. The Kiro agent hooks trigger independently based on file changes:
 
 ```
 Phase 1: Preflight
-  └─ EKS_API_Client.get_cluster_info() — cluster version, addon health (added to preflight report)
+  └─ No agent involvement (preflight is fast, no observability data yet)
 
 Phase 5: Set up monitoring
-  └─ Create AMP_Client, CWL_Client, EKS_API_Client
-  └─ Pass AMP_Client + CWL_Client to AnomalyDetector
+  └─ ContextFileWriter created with run config
+  └─ Initial agent_context.json written (phase: "initializing")
 
 Phase 6: Scaling (monitor + anomaly detection active)
-  └─ AnomalyDetector.handle_alert() now includes:
-      Layer 7: AMP metrics for investigated nodes
-      Layer 8: CloudWatch Logs errors for investigated nodes
+  └─ ContextFileWriter updates phase to "scaling" with start timestamp
+  └─ Proactive scan hook triggers → agent scans AMP for emerging issues
+  └─ On rate drop: ContextFileWriter appends alert → reactive hook triggers
+  └─ On finding: ContextFileWriter appends finding summary
+  └─ Skeptical review hook triggers → review agent verifies findings
 
 Phase 7: Hold-at-peak
-  └─ asyncio.gather(
-       health_sweep.run(),
-       metrics_agent.run(start, end),    ← NEW
-       log_agent.run(start, end),         ← NEW
-     )
+  └─ ContextFileWriter updates phase to "hold-at-peak"
+  └─ Proactive scan hook triggers → agent does deep fleet health scan
+  └─ Skeptical review hook triggers → review agent verifies findings
+  └─ This is the critical window — signal disappears after cleanup
 
-Phase 8: Post-cleanup
-  └─ post_run_reporter.generate(run_id, start, end)  ← NEW
-  └─ chart.generate_chart() — now includes AMP data if available
+Phase 8: Cleanup
+  └─ ContextFileWriter updates phase to "cleanup"
+  └─ Agent hooks stop triggering (no point scanning during teardown)
+
+Phase 9: Summary + Chart
+  └─ Controller reads agent-*.json findings from evidence store
+  └─ Findings included in TestRunSummary and HTML chart
 ```
 
-### Threading and Async Model
+### Decoupled Execution Model
 
-The tool's threading model is critical. The monitor ticker runs on the main asyncio event loop every 5 seconds. Nothing can block it.
+The Python tool and the Kiro agent are completely decoupled:
 
-All new observability clients follow the existing pattern from `diagnostics.py`:
-- boto3 calls run in `loop.run_in_executor(None, ...)` (thread pool)
-- HTTP calls to AMP use `aiohttp` or `run_in_executor` with `requests`
-- Analysis agents run as `asyncio.create_task()` during hold-at-peak
-- Anomaly detector queries run inside `asyncio.gather()` alongside existing evidence collection
+- **Python tool**: Runs in its own Python asyncio event loop. Writes `agent_context.json` synchronously (single JSON write, <10ms). Never waits for the agent.
+- **Kiro agent**: Runs in Kiro's agent loop (separate process). Reads context file, calls MCP tools, writes findings. Can take 30-60 seconds per investigation without affecting the test.
+- **Shared interface**: The evidence store directory on disk. Context file flows Python→Agent. Finding files flow Agent→Python.
 
-The anomaly detector already runs in its own thread via `_safe_callback` in the monitor. New observability queries inside `handle_alert` are safe because they execute in that separate event loop, not the monitor's.
+This is fundamentally different from the old design where observability clients ran inside the Python tool's event loop and had to use `run_in_executor` to avoid blocking the monitor.
 
 ## Components and Interfaces
 
-### AMP Client (`amp_client.py`)
+### ContextFileWriter (`agent_context.py`)
+
+New Python module. Responsible for writing and updating the agent context file.
 
 ```python
-@dataclass
-class AMPTimeSeries:
-    metric_name: str
-    labels: dict[str, str]
-    values: list[tuple[float, float]]  # (timestamp_epoch, value)
-
-@dataclass
-class AMPQueryResult:
-    query: str
-    status: str  # "success", "error", "timeout", "unavailable"
-    series: list[AMPTimeSeries]
-    error_message: str = ""
-
-class AMPClient:
-    def __init__(self, workspace_url: str | None, aws_session=None):
-        """Initialize with AMP workspace query endpoint URL.
-        If workspace_url is None, all queries return unavailable status."""
-
-    async def query_range(
-        self, query: str, start: datetime, end: datetime,
-        step: str = "60s"
-    ) -> AMPQueryResult:
-        """Execute a PromQL range query. Runs HTTP call in executor."""
-
-    async def query_instant(self, query: str) -> AMPQueryResult:
-        """Execute a PromQL instant query."""
-
-    # Pre-built queries
-    async def get_node_cpu_utilization(
-        self, start: datetime, end: datetime
-    ) -> AMPQueryResult:
-        """PromQL: 100 - (avg by(node)(rate(node_cpu_seconds_total{mode='idle'}[5m])) * 100)"""
-
-    async def get_node_memory_utilization(
-        self, start: datetime, end: datetime
-    ) -> AMPQueryResult:
-        """PromQL: (1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes) * 100"""
-
-    async def get_node_network_bytes(
-        self, start: datetime, end: datetime
-    ) -> AMPQueryResult:
-        """PromQL: rate(node_network_transmit_bytes_total{device!='lo'}[5m])"""
-
-    async def get_node_disk_io_utilization(
-        self, start: datetime, end: datetime
-    ) -> AMPQueryResult:
-        """PromQL: rate(node_disk_io_time_seconds_total[5m]) * 100"""
-
-    async def get_pod_cpu_by_namespace(
-        self, start: datetime, end: datetime
-    ) -> AMPQueryResult:
-        """PromQL: sum by(namespace)(rate(container_cpu_usage_seconds_total[5m]))"""
-
-    async def get_pod_memory_by_namespace(
-        self, start: datetime, end: datetime
-    ) -> AMPQueryResult:
-        """PromQL: sum by(namespace)(container_memory_working_set_bytes)"""
-
-    async def get_pod_restarts_by_namespace(
-        self, start: datetime, end: datetime
-    ) -> AMPQueryResult:
-        """PromQL: sum by(namespace)(increase(kube_pod_container_status_restarts_total[5m]))"""
-
-    def is_available(self) -> bool:
-        """Return True if AMP workspace URL is configured."""
+class ContextFileWriter:
+    """Writes agent_context.json to the evidence store run directory.
+    
+    All writes are synchronous JSON dumps to local disk (<10ms).
+    The context file is the sole interface from Python tool → Kiro agent.
+    """
+    
+    def __init__(self, evidence_store: EvidenceStore, run_id: str, config: TestConfig):
+        """Initialize with run directory path and test configuration.
+        Extracts AMP workspace ID, CloudWatch log group, EKS cluster name from config."""
+    
+    def write_initial_context(self, namespaces: list[str], node_list: list[str]) -> None:
+        """Write the initial context file when monitoring starts.
+        Includes: run_id, config summary, namespaces, phase='initializing'."""
+    
+    def update_phase(self, phase: str, timestamp: datetime) -> None:
+        """Update the current test phase and its start timestamp.
+        Phases: 'scaling', 'hold-at-peak', 'cleanup', 'complete'."""
+    
+    def append_alert(self, alert: Alert) -> None:
+        """Append a rate drop alert to the alerts list in the context file.
+        Includes: timestamp, alert_type, message, current_rate, rolling_avg, ready, pending."""
+    
+    def append_finding_summary(self, finding: Finding) -> None:
+        """Append a finding summary to the findings list in the context file.
+        Includes: finding_id, severity, symptom, affected_resources (first 10)."""
 ```
 
-### CloudWatch Logs Client (`cloudwatch_client.py`)
+### Agent Context File Schema (`agent_context.json`)
 
-```python
-@dataclass
-class CWLQueryResult:
-    query: str
-    status: str  # "success", "error", "timeout", "unavailable"
-    results: list[dict[str, str]]  # Each dict is a row from Logs Insights
-    statistics: dict  # bytes_scanned, records_matched, records_scanned
-    error_message: str = ""
-
-class CloudWatchLogsClient:
-    def __init__(
-        self, log_group: str | None, aws_session=None,
-        query_timeout: float = 30.0
-    ):
-        """Initialize with CloudWatch log group name.
-        If log_group is None, all queries return unavailable status."""
-
-    async def run_insights_query(
-        self, query: str, start: datetime, end: datetime
-    ) -> CWLQueryResult:
-        """Start a Logs Insights query, poll with exponential backoff, return results.
-        Cancels query if timeout exceeded."""
-
-    # Pre-built queries
-    async def get_kubelet_errors(
-        self, start: datetime, end: datetime
-    ) -> CWLQueryResult:
-        """Logs Insights: filter @logStream like /kubelet/ | filter @message like /error|Error|ERROR/
-        | stats count(*) as error_count by hostname, @message | sort error_count desc | limit 50"""
-
-    async def get_containerd_errors(
-        self, start: datetime, end: datetime
-    ) -> CWLQueryResult:
-        """Logs Insights: filter @logStream like /containerd/
-        | filter @message like /error|Error|level=error/
-        | stats count(*) by hostname | sort count desc | limit 50"""
-
-    async def get_ipamd_exhaustion(
-        self, start: datetime, end: datetime
-    ) -> CWLQueryResult:
-        """Logs Insights: filter @logStream like /ipamd|aws-node/
-        | filter @message like /no available IP|datastore.*empty|failed to assign/
-        | stats count(*) as exhaustion_count by hostname | sort exhaustion_count desc"""
-
-    async def get_oom_events(
-        self, start: datetime, end: datetime
-    ) -> CWLQueryResult:
-        """Logs Insights: filter @message like /oom_kill|Out of memory|OOMKilled/
-        | stats count(*) by hostname | sort count desc"""
-
-    async def get_node_errors(
-        self, node_hostname: str, start: datetime, end: datetime
-    ) -> CWLQueryResult:
-        """Query all error logs for a specific node."""
-
-    def is_available(self) -> bool:
-        """Return True if log group is configured."""
+```json
+{
+  "run_id": "2024-01-15_14-30-00",
+  "test_start": "2024-01-15T14:30:00Z",
+  "target_pods": 5000,
+  "namespaces": ["scale-test-ns-1", "scale-test-ns-2"],
+  "current_phase": "scaling",
+  "phase_start": "2024-01-15T14:31:00Z",
+  "amp_workspace_id": "ws-abc123def456",
+  "cloudwatch_log_group": "/eks/my-cluster/nodes",
+  "eks_cluster_name": "my-scale-test-cluster",
+  "alerts": [
+    {
+      "timestamp": "2024-01-15T14:35:00Z",
+      "alert_type": "rate_drop",
+      "message": "Ready rate 2.50/s dropped below threshold",
+      "current_rate": 2.5,
+      "rolling_avg": 15.0,
+      "ready_count": 1200,
+      "pending_count": 350
+    }
+  ],
+  "finding_summaries": [
+    {
+      "finding_id": "finding-abc12345",
+      "severity": "critical",
+      "symptom": "FailedCreatePodSandBox x47",
+      "affected_resources": ["node-1", "node-2", "node-3"]
+    }
+  ],
+  "evidence_dir": "/path/to/scale-test-results/2024-01-15_14-30-00"
+}
 ```
 
-### EKS API Client (`eks_client.py`)
+### Agent Finding Schema (`agent-{id}.json`)
 
-```python
-@dataclass
-class EKSAddonInfo:
-    name: str
-    version: str
-    status: str
-    health_issues: list[str]
-
-@dataclass
-class EKSClusterInfo:
-    cluster_name: str
-    status: str  # "ACTIVE", "CREATING", etc.
-    kubernetes_version: str
-    platform_version: str
-    endpoint: str
-    addons: list[EKSAddonInfo]
-    error_message: str = ""
-
-class EKSAPIClient:
-    def __init__(self, cluster_name: str | None, aws_session=None):
-        """Initialize with EKS cluster name.
-        If cluster_name is None, all queries return unavailable status."""
-
-    async def get_cluster_info(self) -> EKSClusterInfo:
-        """Call DescribeCluster + ListAddons + DescribeAddon for each addon."""
-
-    def is_available(self) -> bool:
-        """Return True if cluster name is configured."""
+```json
+{
+  "finding_id": "agent-proactive-20240115T143500",
+  "timestamp": "2024-01-15T14:35:00Z",
+  "source": "proactive-scan",
+  "severity": "warning",
+  "title": "Rising memory pressure on 12 nodes in us-west-2b",
+  "description": "AMP metrics show memory utilization climbing above 85% on 12 nodes...",
+  "affected_resources": ["ip-10-0-47-12", "ip-10-0-47-15", "ip-10-0-48-3"],
+  "evidence": [
+    {
+      "source": "prometheus",
+      "tool": "ExecuteRangeQuery",
+      "query": "node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes * 100",
+      "summary": "12 nodes below 15% available memory"
+    },
+    {
+      "source": "cloudwatch",
+      "tool": "execute_log_insights_query",
+      "query": "filter @message like /OOM/",
+      "summary": "3 OOM kill events in last 3 minutes"
+    }
+  ],
+  "recommended_actions": [
+    "Monitor these nodes closely — evictions likely within 5 minutes",
+    "Consider reducing pod density on us-west-2b nodes"
+  ],
+  "review": {
+    "confidence": "medium",
+    "reasoning": "Independent AMP query confirms memory pressure on 10 of the 12 reported nodes. 2 nodes show recovery. However, CPU cores 0-1 are also saturated on 4 of these nodes, which the investigation did not mention.",
+    "alternative_explanations": [
+      "CPU contention on reserved system cores may be the primary bottleneck, with memory pressure as a secondary effect",
+      "IPAMD memory leak (known issue at high pod density) rather than workload memory pressure"
+    ],
+    "checkpoint_questions": [
+      "4 nodes show CPU core saturation alongside memory pressure. Should we investigate CPU contention as the primary cause?",
+      "Are these nodes running the VPC CNI version with the known IPAMD memory leak?"
+    ],
+    "verification_results": [
+      {
+        "claim": "12 nodes above 85% memory utilization",
+        "verified": "partial",
+        "detail": "Confirmed 10/12 nodes. ip-10-0-47-15 and ip-10-0-48-3 have recovered to 72% and 68%."
+      }
+    ]
+  }
+}
 ```
 
-### Metrics Analyzer Agent (`metrics_agent.py`)
+### Kiro Hook: Proactive Scan (`.kiro/hooks/scale-test-proactive-scan.md`)
 
-```python
-@dataclass
-class NodeResourceSummary:
-    node_name: str
-    avg_cpu_pct: float
-    max_cpu_pct: float
-    avg_memory_pct: float
-    max_memory_pct: float
-    avg_network_bytes_sec: float
-    avg_disk_io_pct: float
+The proactive scan hook triggers when the context file indicates the test is in an active phase. It instructs the agent to scan AMP for fleet-wide anomalies without specifying exact queries.
 
-@dataclass
-class MetricsAnalysisSummary:
-    status: str  # "complete", "partial", "unavailable"
-    time_range_start: str
-    time_range_end: str
-    fleet_avg_cpu_pct: float
-    fleet_avg_memory_pct: float
-    nodes_cpu_above_80: list[NodeResourceSummary]
-    nodes_memory_above_85: list[NodeResourceSummary]
-    nodes_network_anomalies: list[NodeResourceSummary]
-    top_resource_consumers: list[NodeResourceSummary]  # top 10 by CPU
-    error_message: str = ""
-
-class MetricsAnalyzerAgent:
-    def __init__(self, amp_client: AMPClient, evidence_store: EvidenceStore):
-        pass
-
-    async def run(
-        self, run_id: str, start: datetime, end: datetime
-    ) -> MetricsAnalysisSummary:
-        """Query AMP for fleet metrics, analyze, persist to evidence store."""
+```markdown
+---
+triggers:
+  - type: file_change
+    path: "**/agent_context.json"
+    condition: "phase is 'scaling' or 'hold-at-peak'"
+actions:
+  - type: askAgent
+    prompt: |
+      Read the agent context file at {evidence_dir}/agent_context.json.
+      You are monitoring an EKS scale test in the '{current_phase}' phase.
+      
+      Use the Prometheus MCP server tools to scan AMP for fleet-wide anomalies.
+      Look for emerging issues — rising CPU/memory pressure, network errors,
+      disk IO saturation, pod restart spikes — without hardcoded thresholds.
+      
+      If you find anything concerning, write a finding to
+      {evidence_dir}/findings/agent-{id}.json following the Agent Finding schema.
+      
+      Focus on issues that could cause pod ready rate drops.
+      Time is critical — signal disappears after cleanup.
+---
 ```
 
-### Log Analyzer Agent (`log_agent.py`)
+### Kiro Hook: Reactive Investigation (`.kiro/hooks/scale-test-reactive-investigation.md`)
 
-```python
-@dataclass
-class LogErrorGroup:
-    source: str  # "kubelet", "containerd", "ipamd"
-    message_pattern: str
-    count: int
-    affected_nodes: list[str]
+The reactive investigation hook triggers when new alerts appear in the context file. It instructs the agent to investigate using all three MCP servers.
 
-@dataclass
-class LogAnalysisSummary:
-    status: str  # "complete", "partial", "unavailable"
-    time_range_start: str
-    time_range_end: str
-    total_errors: int
-    error_groups: list[LogErrorGroup]
-    ipamd_exhaustion_nodes: list[str]
-    oom_kill_nodes: list[str]
-    error_message: str = ""
-
-class LogAnalyzerAgent:
-    def __init__(self, cwl_client: CloudWatchLogsClient, evidence_store: EvidenceStore):
-        pass
-
-    async def run(
-        self, run_id: str, start: datetime, end: datetime
-    ) -> LogAnalysisSummary:
-        """Query CloudWatch Logs for error patterns, analyze, persist to evidence store."""
+```markdown
+---
+triggers:
+  - type: file_change
+    path: "**/agent_context.json"
+    condition: "new alert entries added"
+actions:
+  - type: askAgent
+    prompt: |
+      Read the agent context file at {evidence_dir}/agent_context.json.
+      A rate drop alert has been detected.
+      
+      Investigate using all available MCP servers:
+      1. Prometheus MCP: query AMP for resource metrics around the alert timestamp
+      2. CloudWatch MCP: search logs for errors correlated with the alert
+      3. EKS MCP: check cluster state, pod logs, and K8s events
+      
+      Correlate findings across sources. Follow the evidence dynamically.
+      Write your investigation report to {evidence_dir}/findings/agent-{id}.json.
+---
 ```
 
-### Post-Run Reporter (`post_run_reporter.py`)
+### Kiro Hook: Skeptical Review (`.kiro/hooks/scale-test-skeptical-review.md`)
+
+The skeptical review hook triggers when a new agent finding file appears. It invokes a separate agent pass that independently verifies the investigation's claims, assigns confidence, and surfaces alternative explanations. This is the key mechanism to prevent runaway analysis.
+
+```markdown
+---
+triggers:
+  - type: file_change
+    path: "**/findings/agent-*.json"
+    condition: "new finding file without review field"
+actions:
+  - type: askAgent
+    prompt: |
+      A new investigation finding has been written. Your role is SKEPTICAL REVIEWER.
+      
+      Read the finding at {finding_path}. Your job:
+      
+      1. VERIFY: Pick the most important claim in the finding and independently
+         re-query the MCP servers to confirm it. Do NOT trust the investigation
+         agent's evidence at face value.
+      
+      2. CONFIDENCE: Assign a confidence level (high/medium/low) with reasoning.
+         - high: your independent verification confirms the key claims
+         - medium: partial confirmation, or the evidence is ambiguous
+         - low: your verification contradicts the finding, or key data is missing
+      
+      3. ALTERNATIVES: List other explanations the investigation may have missed.
+         Check the source code and documentation for context the investigation
+         agent might not have considered.
+      
+      4. CHECKPOINT: If confidence is medium or low, write specific questions
+         for the operator. Example: "The finding blames memory pressure, but
+         CPU cores 0-1 are also saturated. Should we investigate CPU contention?"
+      
+      Append a "review" field to the finding JSON with your assessment:
+      {
+        "review": {
+          "confidence": "medium",
+          "reasoning": "Independent AMP query confirms memory pressure on 10/12 nodes...",
+          "alternative_explanations": ["CPU contention on reserved cores", "..."],
+          "checkpoint_questions": ["Should we investigate CPU contention?"],
+          "verification_results": [
+            {"claim": "12 nodes above 85% memory", "verified": true, "detail": "..."}
+          ]
+        }
+      }
+---
+```
+
+### Steering File (`.kiro/steering/scale-test-observability.md`)
+
+The steering file provides persistent domain knowledge to the agent. Key sections:
+
+1. **EKS Scale Test Context** — What the test does, what phases mean, why timing matters
+2. **AMP Metric Patterns** — Types of metrics available (node_exporter, kube-state-metrics, cadvisor), what anomalous patterns look like at scale
+3. **CloudWatch Log Patterns** — Common error patterns in kubelet, containerd, IPAMD logs during scale tests
+4. **EKS Cluster Context** — How to interpret control plane health, addon status, what matters during scaling
+5. **Agent Finding Schema** — Exact JSON schema the agent must follow when writing findings, including the review field structure
+6. **Investigation Strategies** — How to correlate across sources, what to prioritize, when to escalate severity
+7. **Skeptical Review Process** — How to independently verify claims, assign confidence levels, identify alternative explanations, and write checkpoint questions for the operator
+
+### Evidence Store Extensions (`evidence.py`)
 
 ```python
-@dataclass
-class ObservabilityReport:
-    status: str  # "complete", "partial"
-    sources_available: list[str]  # ["amp", "cloudwatch_logs", "eks_api"]
-    sources_unavailable: list[str]
-    metrics_summary: MetricsAnalysisSummary | None
-    log_summary: LogAnalysisSummary | None
-    cluster_info: EKSClusterInfo | None
-    correlation_notes: list[str]  # Cross-references with anomaly findings
+# New methods added to EvidenceStore
 
-class PostRunReporter:
-    def __init__(
-        self, amp_client: AMPClient,
-        cwl_client: CloudWatchLogsClient,
-        eks_client: EKSAPIClient,
-        evidence_store: EvidenceStore,
-    ):
-        pass
+def write_agent_context(self, run_id: str, context: dict) -> None:
+    """Write agent_context.json to the run directory. Uses _write_json."""
 
-    async def generate(
-        self, run_id: str, start: datetime, end: datetime,
-        findings: list[Finding] | None = None,
-    ) -> ObservabilityReport:
-        """Generate comprehensive post-run report. Persists to evidence store."""
+def load_agent_context(self, run_id: str) -> dict | None:
+    """Load agent_context.json if it exists. Returns None if not present."""
+
+def load_agent_findings(self, run_id: str) -> list[dict]:
+    """Load all agent-*.json files from findings/ directory.
+    Skips malformed files with a warning log. Returns list of parsed dicts."""
+```
+
+### Controller Changes (`controller.py`)
+
+Minimal changes to the existing controller:
+
+```python
+# In ScaleTestController.__init__:
+self._ctx_writer: ContextFileWriter | None = None
+
+# In run(), after monitoring setup (Phase 5):
+self._ctx_writer = ContextFileWriter(self.evidence_store, run_id, self.config)
+self._ctx_writer.write_initial_context(namespaces, node_list)
+
+# In _execute_scaling_via_flux(), at start:
+if self._ctx_writer:
+    self._ctx_writer.update_phase("scaling", datetime.now(timezone.utc))
+
+# In hold-at-peak section:
+if self._ctx_writer:
+    self._ctx_writer.update_phase("hold-at-peak", datetime.now(timezone.utc))
+
+# In anomaly detector callback path, after finding is produced:
+if self._ctx_writer:
+    self._ctx_writer.append_finding_summary(finding)
+
+# In monitor alert callback:
+if self._ctx_writer:
+    self._ctx_writer.append_alert(alert)
+
+# In _make_summary(), before building TestRunSummary:
+agent_findings = self.evidence_store.load_agent_findings(run_id)
+```
+
+### TestConfig Changes (`models.py`)
+
+```python
+# New optional fields added to TestConfig
+amp_workspace_id: Optional[str] = None
+cloudwatch_log_group: Optional[str] = None
+eks_cluster_name: Optional[str] = None
+```
+
+### CLI Changes (`cli.py`)
+
+```python
+# New arguments in parse_args()
+p.add_argument("--amp-workspace-id", type=str, default=None,
+               help="AMP workspace ID for Prometheus MCP server")
+p.add_argument("--cloudwatch-log-group", type=str, default=None,
+               help="CloudWatch log group for node logs")
+p.add_argument("--eks-cluster-name", type=str, default=None,
+               help="EKS cluster name for EKS MCP server")
+```
+
+### Chart Changes (`chart.py`)
+
+The chart generator loads agent findings and renders them as event markers on the timeline:
+
+```python
+# In generate_chart():
+findings_dir = Path(run_dir) / "findings"
+agent_findings = []
+if findings_dir.exists():
+    for f in sorted(findings_dir.glob("agent-*.json")):
+        try:
+            agent_findings.append(json.loads(f.read_text()))
+        except Exception:
+            pass
+
+# Render as vertical annotation lines on the Chart.js time axis
+# Color-coded by severity: info=blue, warning=orange, critical=red
+# Tooltip shows finding title and description
 ```
 
 ## Data Models
 
 ### New TestConfig Fields
 
-```python
-# Added to TestConfig in models.py
-amp_endpoint: Optional[str] = None          # AMP workspace query URL
-cloudwatch_log_group: Optional[str] = None  # CloudWatch log group name
-eks_cluster_name: Optional[str] = None      # EKS cluster name
-```
+Three optional string fields added to the existing `TestConfig` dataclass:
 
-### New CLI Arguments
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `amp_workspace_id` | `Optional[str]` | `None` | AMP workspace ID for the Prometheus MCP server |
+| `cloudwatch_log_group` | `Optional[str]` | `None` | CloudWatch log group name for node logs |
+| `eks_cluster_name` | `Optional[str]` | `None` | EKS cluster name for the EKS MCP server |
 
-```
---amp-endpoint URL          AMP workspace query endpoint URL
---cloudwatch-log-group NAME CloudWatch log group for node logs
---eks-cluster-name NAME     EKS cluster name for API queries
-```
+### Agent Context Schema
 
-### Evidence Store Extensions
+The context file is a flat JSON object. No nested dataclass — it's written by Python and read by the AI agent, so simplicity matters more than type safety.
 
-New files persisted per run:
+| Field | Type | Description |
+|-------|------|-------------|
+| `run_id` | `string` | Test run identifier |
+| `test_start` | `string` (ISO 8601) | Test start timestamp |
+| `target_pods` | `integer` | Target pod count |
+| `namespaces` | `string[]` | K8s namespaces under test |
+| `current_phase` | `string` | Current test phase |
+| `phase_start` | `string` (ISO 8601) | When current phase started |
+| `amp_workspace_id` | `string` (optional) | AMP workspace ID |
+| `cloudwatch_log_group` | `string` (optional) | CloudWatch log group |
+| `eks_cluster_name` | `string` (optional) | EKS cluster name |
+| `alerts` | `object[]` | List of rate drop alerts |
+| `finding_summaries` | `object[]` | List of anomaly detector finding summaries |
+| `evidence_dir` | `string` | Absolute path to run directory |
+
+### Agent Finding Schema
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `finding_id` | `string` | Unique identifier (e.g., `agent-proactive-{timestamp}`) |
+| `timestamp` | `string` (ISO 8601) | When the finding was produced |
+| `source` | `string` | `"proactive-scan"`, `"reactive-investigation"`, or `"skeptical-review"` |
+| `severity` | `string` | `"info"`, `"warning"`, or `"critical"` |
+| `title` | `string` | Short summary of the finding |
+| `description` | `string` | Detailed explanation with evidence |
+| `affected_resources` | `string[]` | Node names, pod names, etc. |
+| `evidence` | `object[]` | List of MCP queries executed and their summaries |
+| `recommended_actions` | `string[]` | Suggested next steps |
+| `review` | `object` (optional) | Skeptical review assessment, added by review agent |
+
+### Review Field Schema (within Agent Finding)
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `confidence` | `string` | `"high"`, `"medium"`, or `"low"` |
+| `reasoning` | `string` | Explanation of confidence assessment |
+| `alternative_explanations` | `string[]` | Other possible causes the investigation may have missed |
+| `checkpoint_questions` | `string[]` | Questions for the operator (present when confidence < high) |
+| `verification_results` | `object[]` | Independent verification of key claims |
+
+### Evidence Store File Layout (Updated)
 
 ```
 {run_id}/
-  metrics_analysis.json     # MetricsAnalysisSummary from Metrics_Analyzer_Agent
-  log_analysis.json         # LogAnalysisSummary from Log_Analyzer_Agent
-  observability_report.json # ObservabilityReport from Post_Run_Reporter
+  agent_context.json              ← NEW: written by Python, read by agent
+  config.json
+  preflight.json
+  rate_data.jsonl
+  events.jsonl
+  summary.json
+  findings/
+    finding-{id}.json             ← existing anomaly detector findings
+    agent-{id}.json               ← NEW: written by Kiro agent
+  diagnostics/
+    {node}_{ts}.json
+    health_sweep.json
+```
+
+### MCP Server Configuration (`~/.kiro/settings/mcp.json`)
+
+The three MCP servers to add to the user's Kiro MCP configuration:
+
+```json
+{
+  "mcpServers": {
+    "awslabs.prometheus-mcp-server": {
+      "command": "uvx",
+      "args": ["awslabs.prometheus-mcp-server"],
+      "env": {
+        "PROMETHEUS_URL": "https://aps-workspaces.us-west-2.amazonaws.com/workspaces/{workspace_id}",
+        "AWS_REGION": "us-west-2"
+      }
+    },
+    "awslabs.cloudwatch-mcp-server": {
+      "command": "uvx",
+      "args": ["awslabs.cloudwatch-mcp-server"],
+      "env": {
+        "AWS_REGION": "us-west-2"
+      }
+    },
+    "awslabs.eks-mcp-server": {
+      "command": "uvx",
+      "args": ["awslabs.eks-mcp-server"],
+      "env": {
+        "AWS_REGION": "us-west-2",
+        "EKS_CLUSTER_NAME": "{cluster_name}"
+      }
+    }
+  }
+}
 ```
 
 ### Serialization
 
-All new dataclasses extend the existing `_SerializableMixin` pattern from `models.py`, providing `to_dict()` and `from_dict()` methods. The `AMPTimeSeries.values` field (list of tuples) serializes as a list of `[timestamp, value]` arrays in JSON.
-
-### AMP SigV4 Authentication
-
-The AMP client uses `botocore.auth.SigV4Auth` to sign HTTP requests to the AMP query endpoint. The AWS session is obtained from the existing `aws_client` (boto3 session) passed through the controller, consistent with how `diagnostics.py` gets its SSM client.
-
-```python
-# Signing pattern for AMP queries
-from botocore.auth import SigV4Auth
-from botocore.awsrequest import AWSRequest
-
-request = AWSRequest(method="POST", url=query_url, data=params)
-SigV4Auth(credentials, "aps", region).add_auth(request)
-response = session.send(request.prepare())
-```
-
+The `ContextFileWriter` uses `json.dumps(data, indent=2, default=str)` matching the existing `EvidenceStore._write_json` pattern. Agent findings are plain JSON files — no `_SerializableMixin` needed since they're written by the AI agent and read as raw dicts by the Python tool.
 
 ## Correctness Properties
 
 *A property is a characteristic or behavior that should hold true across all valid executions of a system — essentially, a formal statement about what the system should do. Properties serve as the bridge between human-readable specifications and machine-verifiable correctness guarantees.*
 
-### Property 1: AMP query results are well-structured
+### Property 1: Context file correctly maps TestConfig fields
 
-*For any* valid PromQL query string, time range (start < end), and step interval, the AMP_Client SHALL return an AMPQueryResult where: status is one of ("success", "error", "timeout", "unavailable"), series is a list (possibly empty), and each AMPTimeSeries has a non-empty metric_name, a dict of labels, and a list of (timestamp, value) tuples where timestamps are monotonically increasing.
+*For any* TestConfig with any combination of `amp_workspace_id`, `cloudwatch_log_group`, and `eks_cluster_name` set or None, the ContextFileWriter SHALL produce an `agent_context.json` where: (a) every non-None config field appears in the JSON with its exact value, (b) every None config field is absent from the JSON (not present as null), and (c) the `run_id`, `target_pods`, and `namespaces` fields are always present and match the input.
 
-**Validates: Requirements 1.1, 1.2**
+**Validates: Requirements 2.1, 2.6, 8.2, 8.3, 8.4, 8.5**
 
-### Property 2: Observability client errors never propagate as exceptions
+### Property 2: Context file phase updates are consistent
 
-*For any* HTTP error status code (4xx, 5xx) or network exception returned by the backing service, the AMP_Client, CloudWatch_Logs_Client, and EKS_API_Client SHALL return a result object with error status and message, never raising an exception to the caller.
+*For any* sequence of phase transitions (from the set: "initializing", "scaling", "hold-at-peak", "cleanup", "complete"), after each call to `update_phase(phase, timestamp)`, the context file SHALL have `current_phase` equal to the last phase set and `phase_start` equal to the last timestamp set. All other fields in the context file SHALL remain unchanged.
 
-**Validates: Requirements 1.3, 3.3**
+**Validates: Requirements 2.2**
 
-### Property 3: AMP requests include SigV4 authentication
+### Property 3: Context file appends accumulate correctly
 
-*For any* query executed by the AMP_Client when a workspace URL is configured, the outgoing HTTP request SHALL include an Authorization header containing "AWS4-HMAC-SHA256" and the required SigV4 signed headers (X-Amz-Date, X-Amz-Security-Token if using session credentials).
+*For any* sequence of N alerts and M finding summaries appended to the context file (in any interleaving order), the resulting context file SHALL have exactly N entries in the `alerts` list and exactly M entries in the `finding_summaries` list, each containing the data from the corresponding append call, in the order they were appended.
 
-**Validates: Requirements 1.6**
+**Validates: Requirements 2.3, 2.4**
 
-### Property 4: Unconfigured clients return unavailable status
+### Property 4: Agent findings round-trip through Evidence Store
 
-*For any* observability client (AMP_Client, CloudWatch_Logs_Client, EKS_API_Client) initialized with None configuration, `is_available()` SHALL return False, and every query method SHALL return a result with status "unavailable" and empty data (empty series, empty results, or empty cluster info).
+*For any* set of valid agent finding JSON files written to the `findings/` directory with filenames matching `agent-*.json`, calling `load_agent_findings(run_id)` SHALL return a list containing exactly the parsed contents of each file. The count of returned findings SHALL equal the count of `agent-*.json` files in the directory.
 
-**Validates: Requirements 1.7, 2.6, 3.4**
+**Validates: Requirements 6.3, 6.4**
 
-### Property 5: CloudWatch Logs query lifecycle completes correctly
+### Property 5: Malformed agent findings are skipped gracefully
 
-*For any* Logs Insights query string and time range, the CloudWatch_Logs_Client SHALL call StartQuery, poll GetQueryResults until status is "Complete" or "Failed", and return a CWLQueryResult with the matching status and results. The query_id from StartQuery SHALL be used in all subsequent GetQueryResults calls.
+*For any* mix of valid and malformed JSON files in the `findings/` directory matching `agent-*.json`, calling `load_agent_findings(run_id)` SHALL return only the successfully parsed findings and SHALL not raise an exception. The count of returned findings SHALL equal the count of valid JSON files.
 
-**Validates: Requirements 2.1, 2.2**
+**Validates: Requirements 6.6, 11.5**
 
-### Property 6: CloudWatch Logs query timeout triggers cancellation
+### Property 6: Agent finding schema validation
 
-*For any* query where GetQueryResults never returns "Complete" within the configured timeout, the CloudWatch_Logs_Client SHALL call StopQuery with the query_id and return a CWLQueryResult with status "timeout".
+*For any* valid agent finding dict containing all required fields (`finding_id`, `timestamp`, `source`, `severity`, `title`, `description`, `affected_resources`, `evidence`, `recommended_actions`), the finding SHALL pass schema validation. For any dict missing one or more required fields, the validation SHALL identify the missing fields. When a `review` field is present, it SHALL contain `confidence`, `reasoning`, `alternative_explanations`, `checkpoint_questions`, and `verification_results`.
 
-**Validates: Requirements 2.3**
+**Validates: Requirements 6.1, 6.2**
 
-### Property 7: CloudWatch Logs node-specific queries filter by hostname
+### Property 7: Agent findings included in test run summary
 
-*For any* hostname string passed to `get_node_errors()`, the generated Logs Insights query string SHALL contain a filter clause that matches the hostname, ensuring results are scoped to that specific node.
+*For any* set of agent findings loaded from the evidence store (including findings with and without review fields), the TestRunSummary SHALL include an `agent_findings` field containing: (a) a count matching the number of loaded findings, (b) a severity breakdown matching the actual severity distribution, and (c) a list of finding summaries preserving the finding IDs and review confidence levels where present.
 
-**Validates: Requirements 2.5**
+**Validates: Requirements 9.1**
 
-### Property 8: CloudWatch Logs polling uses exponential backoff
+### Property 8: Chart renders agent finding markers when findings exist
 
-*For any* sequence of N poll attempts before query completion, the sleep interval before attempt i (0-indexed) SHALL be `min(0.5 * 2^i, 5.0)` seconds. The intervals SHALL be: 0.5, 1.0, 2.0, 4.0, 5.0, 5.0, ...
+*For any* non-empty set of agent findings in the run directory, the generated chart HTML SHALL contain annotation markers for each finding. For an empty set of agent findings, the chart HTML SHALL be generated successfully without annotation markers.
 
-**Validates: Requirements 2.7**
-
-### Property 9: EKS cluster info contains all required fields
-
-*For any* successful DescribeCluster API response, the returned EKSClusterInfo SHALL have non-empty cluster_name, status, kubernetes_version, platform_version, and endpoint fields. For each addon returned by ListAddons/DescribeAddon, the EKSAddonInfo SHALL have non-empty name, version, and status fields.
-
-**Validates: Requirements 3.1, 3.2**
-
-### Property 10: Metrics agent correctly identifies threshold violations and ranks by severity
-
-*For any* set of node resource metrics returned by AMP, the MetricsAnalysisSummary SHALL include exactly those nodes with avg CPU > 80% in `nodes_cpu_above_80` and exactly those nodes with avg memory > 85% in `nodes_memory_above_85`. The `top_resource_consumers` list SHALL contain at most 10 nodes, sorted by descending CPU utilization.
-
-**Validates: Requirements 4.2, 4.3**
-
-### Property 11: Log agent correctly groups errors by source
-
-*For any* set of CloudWatch Logs Insights results containing error entries, the LogAnalysisSummary SHALL group errors by source (kubelet, containerd, ipamd), and the sum of all error_group counts SHALL equal total_errors. Each LogErrorGroup SHALL have a non-empty source, message_pattern, and count > 0.
-
-**Validates: Requirements 5.2**
-
-### Property 12: Log agent detects IPAMD exhaustion nodes
-
-*For any* set of CloudWatch Logs results where some entries match IPAMD datastore exhaustion patterns ("no available IP", "datastore.*empty", "failed to assign"), the LogAnalysisSummary.ipamd_exhaustion_nodes SHALL contain exactly the hostnames from those matching entries.
-
-**Validates: Requirements 5.3**
-
-### Property 13: Post-run reporter handles partial source availability
-
-*For any* combination of available and unavailable observability sources (2^3 = 8 combinations), the ObservabilityReport SHALL list each source correctly in either `sources_available` or `sources_unavailable`, and the report status SHALL be "complete" when all sources are available, "partial" when at least one is unavailable.
-
-**Validates: Requirements 6.2, 6.3**
-
-### Property 14: Anomaly detector includes observability evidence when configured
-
-*For any* alert investigation where AMP_Client and/or CloudWatch_Logs_Client are configured and return data, the resulting Finding.evidence_references SHALL contain entries prefixed with "amp:" and/or "cwl:" respectively, in addition to the existing evidence layers.
-
-**Validates: Requirements 7.1, 7.2**
-
-### Property 15: Anomaly detector produces valid findings despite observability failures
-
-*For any* alert investigation where AMP_Client or CloudWatch_Logs_Client raise exceptions or return errors, the Anomaly_Detector SHALL still produce a valid Finding with non-empty finding_id, timestamp, severity, and symptom. The Finding SHALL contain evidence from all non-failing evidence layers.
-
-**Validates: Requirements 7.3, 7.4**
-
-### Property 16: Analysis summary serialization round-trip
-
-*For any* valid MetricsAnalysisSummary, LogAnalysisSummary, or ObservabilityReport, calling `to_dict()` then `from_dict()` on the result SHALL produce an object equivalent to the original.
-
-**Validates: Requirements 4.6, 5.5, 6.4**
-
-### Property 17: Chart includes resource utilization section when AMP data exists
-
-*For any* run directory containing a valid `metrics_analysis.json` file, the generated chart HTML SHALL contain a canvas element for the resource utilization chart and the corresponding Chart.js dataset configuration.
-
-**Validates: Requirements 11.1**
+**Validates: Requirements 9.2, 9.3**
 
 ## Error Handling
 
-### Client-Level Error Handling
+### Context File Write Errors
 
-All three observability clients follow the same error handling pattern:
+The ContextFileWriter wraps all file writes in try/except. If a write fails (disk full, permissions):
+- The failure is logged at WARNING level
+- The controller continues — context file writes are best-effort
+- The test run is not affected; the context file is supplementary
 
-1. **Unconfigured**: When initialized with `None` configuration, `is_available()` returns `False`. All query methods return immediately with status `"unavailable"` and empty data. No network calls are made.
+### Agent Finding Load Errors
 
-2. **Network errors**: HTTP timeouts, connection refused, DNS failures — caught by the client, returned as status `"error"` with the exception message. Never propagated to the caller.
+The `load_agent_findings` method handles three error cases:
+1. **Findings directory doesn't exist**: Returns empty list (normal case when agent hasn't run)
+2. **Malformed JSON file**: Logs warning with filename, skips the file, continues loading others
+3. **File read permission error**: Logs warning, skips the file
 
-3. **Authentication errors**: SigV4 signing failures or expired credentials — caught and returned as status `"error"`. The AMP client logs the specific auth error for debugging.
+This matches the existing pattern in `EvidenceStore.load_run()` where individual file failures don't block the overall load.
 
-4. **Service errors**: AMP returns 4xx/5xx, CloudWatch Logs returns error status, EKS API throws ClientError — all caught and returned as error results.
+### Agent Context File Corruption
 
-### Agent-Level Error Handling
+If the context file becomes corrupted mid-write (e.g., process killed during write):
+- The ContextFileWriter reads the existing file, updates it, and writes the full file atomically
+- If the read fails (corrupted JSON), the writer recreates the context file from the current state
+- The agent may miss one update cycle but will pick up the next write
 
-The Metrics_Analyzer_Agent and Log_Analyzer_Agent wrap all client calls in try/except:
-- If the client returns error/unavailable status, the agent returns a summary with status `"unavailable"` or `"partial"`.
-- If an unexpected exception occurs, the agent logs it and returns an empty summary with status `"error"`.
+### MCP Server Unavailability
 
-### Anomaly Detector Error Handling
+When MCP servers are not configured or unavailable:
+- The Python tool is completely unaffected — it only writes context files and reads findings
+- The Kiro agent hooks may trigger but the agent will report that tools are unavailable
+- No findings are produced, which is handled by the "no agent findings" path in summary/chart generation
 
-The new observability evidence layers (7 and 8) are wrapped in individual try/except blocks inside `handle_alert()`. If either fails:
-- The failure is logged at WARNING level.
-- The investigation continues with remaining evidence layers.
-- The Finding is produced with whatever evidence was successfully collected.
+### Controller Integration Errors
 
-This matches the existing pattern where SSM failures on individual nodes don't block the overall investigation.
-
-### Controller Error Handling
-
-- Client initialization failures (bad credentials, missing boto3) are caught during setup. The controller logs a warning and sets the client to `None`, which causes all downstream code to treat it as unconfigured.
-- Agent failures during hold-at-peak are caught by `asyncio.gather(return_exceptions=True)`, matching the existing pattern for the health sweep.
-- Post-run reporter failures are caught and logged; they don't affect the test summary or chart generation.
+All ContextFileWriter calls in the controller are guarded by `if self._ctx_writer:` checks:
+- If ContextFileWriter initialization fails, `_ctx_writer` stays None
+- All subsequent calls are no-ops
+- The test runs exactly as it did before this feature
 
 ## Testing Strategy
 
@@ -560,14 +653,11 @@ This matches the existing pattern where SSM failures on individual nodes don't b
 
 Unit tests cover specific examples and edge cases:
 
-- AMP client: mock HTTP responses for success, 4xx, 5xx, timeout, malformed JSON
-- CloudWatch Logs client: mock StartQuery/GetQueryResults lifecycle, timeout cancellation, exponential backoff timing
-- EKS API client: mock DescribeCluster/ListAddons/DescribeAddon responses, ClientError handling
-- Metrics agent: specific threshold boundary cases (exactly 80% CPU, exactly 85% memory)
-- Log agent: specific IPAMD pattern matching, empty results, mixed sources
-- Post-run reporter: all 8 combinations of source availability
-- Chart generator: with and without metrics_analysis.json
-- Serialization: specific edge cases (empty lists, None fields, datetime serialization)
+- **ContextFileWriter**: Write initial context with specific config, verify JSON structure. Update phase, verify only phase fields change. Append alert, verify alert list grows. Append finding summary, verify finding list grows.
+- **Evidence Store extensions**: Write and load agent context round-trip. Load agent findings from directory with mix of valid/invalid files. Load from empty directory. Load from non-existent directory.
+- **TestConfig**: Verify new fields default to None. Verify serialization round-trip with new fields.
+- **CLI**: Verify new arguments are parsed correctly. Verify missing arguments default to None.
+- **Chart**: Generate chart with agent findings present. Generate chart without agent findings. Verify annotation markers in HTML output.
 
 ### Property-Based Tests
 
@@ -575,22 +665,34 @@ Property-based tests use `hypothesis` (Python PBT library). Each test runs a min
 
 Properties to implement as PBT:
 
-1. **Property 1** — Generate random PromQL strings, time ranges, step intervals; verify AMPQueryResult structure invariants.
-2. **Property 2** — Generate random HTTP error codes and exception types; verify no exception propagates from any client method.
-3. **Property 4** — For each client type, verify all methods return unavailable when unconfigured.
-4. **Property 8** — Generate random poll counts (1-20); verify backoff intervals match formula.
-5. **Property 10** — Generate random node metrics (0-100% CPU, 0-100% memory); verify threshold filtering and top-10 ranking.
-6. **Property 11** — Generate random log entries with random sources; verify grouping correctness and count consistency.
-7. **Property 12** — Generate random log entries, some matching IPAMD patterns; verify exact node detection.
-8. **Property 13** — Generate all 8 combinations of source availability; verify report classification.
-9. **Property 15** — Generate random alerts with random client failure modes; verify Finding is always produced.
-10. **Property 16** — Generate random summary objects; verify serialization round-trip.
+1. **Property 1** — Generate random TestConfig with random combinations of None/set observability fields, random namespaces, random target_pods. Verify context file JSON structure.
+   - Tag: **Feature: aws-observability-integration, Property 1: Context file correctly maps TestConfig fields**
 
-Each property test is tagged with: **Feature: aws-observability-integration, Property {N}: {title}**
+2. **Property 2** — Generate random sequences of phase transitions with random timestamps. Verify each update produces correct phase/timestamp and preserves other fields.
+   - Tag: **Feature: aws-observability-integration, Property 2: Context file phase updates are consistent**
+
+3. **Property 3** — Generate random interleaved sequences of alerts and finding summaries. Verify counts and ordering in the resulting context file.
+   - Tag: **Feature: aws-observability-integration, Property 3: Context file appends accumulate correctly**
+
+4. **Property 4** — Generate random sets of valid agent finding JSON files, write them to a temp directory, verify load_agent_findings returns all of them.
+   - Tag: **Feature: aws-observability-integration, Property 4: Agent findings round-trip through Evidence Store**
+
+5. **Property 5** — Generate random mixes of valid JSON and malformed strings, write as agent-*.json files, verify only valid ones are returned.
+   - Tag: **Feature: aws-observability-integration, Property 5: Malformed agent findings are skipped gracefully**
+
+6. **Property 6** — Generate random dicts with random subsets of required fields. Verify schema validation correctly identifies complete vs incomplete findings.
+   - Tag: **Feature: aws-observability-integration, Property 6: Agent finding schema validation**
+
+7. **Property 7** — Generate random lists of agent findings with random severities. Verify summary contains correct counts and severity breakdown.
+   - Tag: **Feature: aws-observability-integration, Property 7: Agent findings included in test run summary**
+
+8. **Property 8** — Generate random sets of agent findings (including empty set). Verify chart HTML contains correct number of annotation markers.
+   - Tag: **Feature: aws-observability-integration, Property 8: Chart renders agent finding markers when findings exist**
 
 ### Test Configuration
 
 - PBT library: `hypothesis`
 - Minimum iterations: 100 per property (via `@settings(max_examples=100)`)
-- Mocking: `unittest.mock` for boto3 clients and HTTP responses
-- Async testing: `pytest-asyncio` for async method tests
+- Async testing: Not needed — all testable code is synchronous (file I/O)
+- Mocking: Minimal — tests use temp directories for file I/O, no network mocking needed
+- The Python tool code being tested is all synchronous JSON file operations, making tests fast and deterministic
