@@ -41,7 +41,25 @@ from k8s_scale_test.models import (
 from k8s_scale_test.monitor import PodRateMonitor
 from k8s_scale_test.preflight import PreflightChecker
 
+import time as _time
+
 log = logging.getLogger(__name__)
+
+
+class _ObserverHandle:
+    """Compatibility wrapper so _stop_observer works with both subprocess.Popen and thread-based observers."""
+
+    def __init__(self, thread):
+        self._thread = thread
+
+    def terminate(self):
+        pass  # Thread stops when self._running is set to False
+
+    def wait(self, timeout=5):
+        self._thread.join(timeout=timeout)
+
+    def kill(self):
+        pass
 
 
 class ScaleTestController:
@@ -628,57 +646,64 @@ class ScaleTestController:
         )
 
     async def _start_observer(self, run_id: str, namespaces: list[str]):
-        """Launch an independent kubectl watch process for rate cross-validation.
+        """Launch an independent observer that polls deployment status periodically.
+
+        Uses `kubectl get deployment` every 5s instead of `kubectl -w` (watch),
+        because the watch stream can't keep up at 30K+ pods — it falls behind
+        and reports stale data. Polling gives a consistent snapshot each interval.
 
         Writes to {run_dir}/observer.log so each run has its own observer data.
-        This is the independent check that catches monitor bugs.
         """
         import subprocess
         rd = self.evidence_store._run_dir(run_id)
         obs_file = rd / "observer.log"
         ns = namespaces[0] if namespaces else "default"
 
-        # Write header
-        obs_file.write_text("timestamp,name,ready,replicas,available\n")
+        obs_file.write_text("timestamp,name ready replicas available\n")
 
         try:
-            proc = subprocess.Popen(
-                ["kubectl", "get", "deployment", "-n", ns, "-w",
-                 "-o", "custom-columns="
-                 "NAME:.metadata.name,"
-                 "READY:.status.readyReplicas,"
-                 "REPLICAS:.status.replicas,"
-                 "AVAILABLE:.status.availableReplicas",
-                 "--no-headers"],
-                stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True,
-            )
-            # Background thread to read kubectl output and write to file
             import threading
-            def _reader():
+
+            def _poller():
                 try:
                     with open(obs_file, "a") as fh:
-                        for line in proc.stdout:
-                            line = line.strip()
-                            if line:
-                                ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-                                fh.write(f"{ts},{line}\n")
-                                fh.flush()
+                        while self._running:
+                            try:
+                                result = subprocess.run(
+                                    ["kubectl", "get", "deployment", "-n", ns,
+                                     "-o", "custom-columns="
+                                     "NAME:.metadata.name,"
+                                     "READY:.status.readyReplicas,"
+                                     "REPLICAS:.status.replicas,"
+                                     "AVAILABLE:.status.availableReplicas",
+                                     "--no-headers"],
+                                    capture_output=True, text=True, timeout=15,
+                                )
+                                if result.returncode == 0:
+                                    ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+                                    for line in result.stdout.strip().splitlines():
+                                        line = line.strip()
+                                        if line:
+                                            fh.write(f"{ts},{line}\n")
+                                    fh.flush()
+                            except Exception:
+                                pass
+                            _time.sleep(5)
                 except Exception:
                     pass
-            t = threading.Thread(target=_reader, daemon=True)
+
+            t = threading.Thread(target=_poller, daemon=True)
             t.start()
-            log.info("Observer started: kubectl watch in '%s' → %s", ns, obs_file)
-            return proc
-        except FileNotFoundError:
-            log.warning("Observer: kubectl not found, skipping independent watch")
-            return None
+            log.info("Observer started: kubectl poll every 5s in '%s' → %s", ns, obs_file)
+            # Return a sentinel object with terminate/wait/kill for _stop_observer compat
+            return _ObserverHandle(t)
         except Exception as exc:
             log.warning("Observer failed to start: %s", exc)
             return None
 
     @staticmethod
     def _stop_observer(proc):
-        """Terminate the observer kubectl process."""
+        """Terminate the observer process or thread."""
         if proc is None:
             return
         try:

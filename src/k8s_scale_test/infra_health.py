@@ -24,9 +24,13 @@ class InfraHealthAgent:
 
         When InsufficientCapacityError events fire, the question is: is EC2
         actually out of capacity, or is Karpenter itself resource-starved?
+
+        Compares actual usage against the pod's resource limits (not hardcoded
+        thresholds) so the check adapts to whatever limits are configured.
         """
         result = {"checked": False, "pod_name": "", "cpu_usage": "",
-                  "memory_usage": "", "restarts": 0, "issues": []}
+                  "memory_usage": "", "restarts": 0, "issues": [],
+                  "cpu_limit": "", "memory_limit": ""}
         try:
             loop = asyncio.get_event_loop()
             v1 = self.k8s_client.CoreV1Api()
@@ -51,6 +55,18 @@ class InfraHealthAgent:
             result["checked"] = True
             result["pod_name"] = pod.metadata.name
 
+            # Extract resource limits from the pod spec
+            cpu_limit_m = 0
+            mem_limit_mi = 0
+            for container in (pod.spec.containers or []):
+                if container.name == "controller":
+                    limits = (container.resources.limits or {}) if container.resources else {}
+                    cpu_limit_m = _parse_cpu_millicores(limits.get("cpu", ""))
+                    mem_limit_mi = _parse_memory_mi(limits.get("memory", ""))
+                    result["cpu_limit"] = limits.get("cpu", "")
+                    result["memory_limit"] = limits.get("memory", "")
+                    break
+
             for cs in (pod.status.container_statuses or []):
                 if cs.name == "controller":
                     result["restarts"] = cs.restart_count or 0
@@ -73,14 +89,30 @@ class InfraHealthAgent:
                         mem = c.get("usage", {}).get("memory", "")
                         result["cpu_usage"] = cpu
                         result["memory_usage"] = mem
-                        cpu_millicores = _parse_cpu_millicores(cpu)
-                        if cpu_millicores > 900:
+                        cpu_usage_m = _parse_cpu_millicores(cpu)
+                        mem_usage_mi = _parse_memory_mi(mem)
+
+                        # Compare against actual limits (80% threshold)
+                        if cpu_limit_m > 0:
+                            cpu_pct = cpu_usage_m / cpu_limit_m * 100
+                            if cpu_pct > 80:
+                                result["issues"].append(
+                                    f"Karpenter CPU at {cpu_pct:.0f}% of limit "
+                                    f"({cpu} used / {result['cpu_limit']} limit)")
+                        elif cpu_usage_m > 900:
+                            # No limit set — fall back to absolute threshold
                             result["issues"].append(
-                                f"Karpenter CPU usage {cpu} — near limit, may be throttled")
-                        mem_mi = _parse_memory_mi(mem)
-                        if mem_mi > 900:
+                                f"Karpenter CPU usage {cpu} with no limit set")
+
+                        if mem_limit_mi > 0:
+                            mem_pct = mem_usage_mi / mem_limit_mi * 100
+                            if mem_pct > 80:
+                                result["issues"].append(
+                                    f"Karpenter memory at {mem_pct:.0f}% of limit "
+                                    f"({mem} used / {result['memory_limit']} limit)")
+                        elif mem_usage_mi > 900:
                             result["issues"].append(
-                                f"Karpenter memory usage {mem} — near limit, risk of OOM")
+                                f"Karpenter memory usage {mem} with no limit set")
                         break
             except Exception:
                 log.debug("Metrics API unavailable for Karpenter — skipping resource check")
