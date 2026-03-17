@@ -218,10 +218,12 @@ class PodRateMonitor:
                 # _ready can jump by thousands in one shot. The delta belongs to the entire
                 # disconnection period, not just the last 5s tick. Mark it as a gap so the
                 # rate is attributed correctly.
+                relist_gap = False
                 if relist_time and relist_time != last_seen_relist and not first:
                     delta = ready - prev_ready
                     if abs(delta) > 100:  # significant jump coinciding with re-list
                         is_gap = True
+                        relist_gap = True
                         log.debug("Ticker: relist detected, delta_ready=%d marked as gap", delta)
                     last_seen_relist = relist_time
 
@@ -246,6 +248,22 @@ class PodRateMonitor:
                         interval_seconds=elapsed, is_gap=is_gap)
                     self._time_series.append(dp)
                     self.evidence_store.append_rate_datapoint(self.run_id, dp)
+
+                # Alert the anomaly detector when a watch reconnect causes a monitoring gap.
+                # This lets it investigate what caused the watch to break (API server pressure,
+                # token expiry, network issues) rather than silently losing data.
+                if relist_gap and not self._alert_in_flight:
+                    self._alert_in_flight = True
+                    delta = ready - prev_ready
+                    a = Alert(alert_type=AlertType.MONITOR_GAP, timestamp=now,
+                        message=f"Watch reconnect gap: {elapsed:.0f}s blind spot, delta_ready={delta}",
+                        context={"gap_seconds": elapsed, "delta_ready": delta,
+                                 "ready": ready, "pending": pending,
+                                 "prev_ready": prev_ready,
+                                 "namespaces": self.namespaces})
+                    log.warning("Monitor gap: %.0fs blind spot, delta_ready=%d (watch reconnect)",
+                                elapsed, delta)
+                    for cb in self._alert_callbacks: asyncio.create_task(self._safe_callback(cb, a))
 
                 mr = max(100, self.config.target_pods * 0.01)
                 if not first and not is_gap and not is_hold and pending > 0 and ready > mr and not self._alert_in_flight and self._check_threshold(rate, ra):

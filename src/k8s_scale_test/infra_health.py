@@ -25,8 +25,8 @@ class InfraHealthAgent:
         When InsufficientCapacityError events fire, the question is: is EC2
         actually out of capacity, or is Karpenter itself resource-starved?
 
-        Compares actual usage against the pod's resource limits (not hardcoded
-        thresholds) so the check adapts to whatever limits are configured.
+        On test clusters, CPU/memory limits on Karpenter add latency via
+        throttling. We flag limits as an issue and recommend removing them.
         """
         result = {"checked": False, "pod_name": "", "cpu_usage": "",
                   "memory_usage": "", "restarts": 0, "issues": [],
@@ -56,16 +56,28 @@ class InfraHealthAgent:
             result["pod_name"] = pod.metadata.name
 
             # Extract resource limits from the pod spec
-            cpu_limit_m = 0
-            mem_limit_mi = 0
+            cpu_limit_str = ""
+            mem_limit_str = ""
             for container in (pod.spec.containers or []):
                 if container.name == "controller":
                     limits = (container.resources.limits or {}) if container.resources else {}
-                    cpu_limit_m = _parse_cpu_millicores(limits.get("cpu", ""))
-                    mem_limit_mi = _parse_memory_mi(limits.get("memory", ""))
-                    result["cpu_limit"] = limits.get("cpu", "")
-                    result["memory_limit"] = limits.get("memory", "")
+                    cpu_limit_str = limits.get("cpu", "")
+                    mem_limit_str = limits.get("memory", "")
+                    result["cpu_limit"] = cpu_limit_str
+                    result["memory_limit"] = mem_limit_str
                     break
+
+            # Flag resource limits as a performance issue on test clusters.
+            # Limits cause CPU throttling and OOM kills under load — for scale
+            # testing, Karpenter should run without limits so it can burst freely.
+            if cpu_limit_str:
+                result["issues"].append(
+                    f"Karpenter has CPU limit ({cpu_limit_str}) — causes throttling under load, "
+                    f"recommend removing for scale tests")
+            if mem_limit_str:
+                result["issues"].append(
+                    f"Karpenter has memory limit ({mem_limit_str}) — risk of OOM under load, "
+                    f"recommend removing for scale tests")
 
             for cs in (pod.status.container_statuses or []):
                 if cs.name == "controller":
@@ -89,30 +101,6 @@ class InfraHealthAgent:
                         mem = c.get("usage", {}).get("memory", "")
                         result["cpu_usage"] = cpu
                         result["memory_usage"] = mem
-                        cpu_usage_m = _parse_cpu_millicores(cpu)
-                        mem_usage_mi = _parse_memory_mi(mem)
-
-                        # Compare against actual limits (80% threshold)
-                        if cpu_limit_m > 0:
-                            cpu_pct = cpu_usage_m / cpu_limit_m * 100
-                            if cpu_pct > 80:
-                                result["issues"].append(
-                                    f"Karpenter CPU at {cpu_pct:.0f}% of limit "
-                                    f"({cpu} used / {result['cpu_limit']} limit)")
-                        elif cpu_usage_m > 900:
-                            # No limit set — fall back to absolute threshold
-                            result["issues"].append(
-                                f"Karpenter CPU usage {cpu} with no limit set")
-
-                        if mem_limit_mi > 0:
-                            mem_pct = mem_usage_mi / mem_limit_mi * 100
-                            if mem_pct > 80:
-                                result["issues"].append(
-                                    f"Karpenter memory at {mem_pct:.0f}% of limit "
-                                    f"({mem} used / {result['memory_limit']} limit)")
-                        elif mem_usage_mi > 900:
-                            result["issues"].append(
-                                f"Karpenter memory usage {mem} with no limit set")
                         break
             except Exception:
                 log.debug("Metrics API unavailable for Karpenter — skipping resource check")
@@ -120,7 +108,7 @@ class InfraHealthAgent:
             if result["issues"]:
                 log.warning("Karpenter health: %s", "; ".join(result["issues"]))
             else:
-                log.info("Karpenter health: OK (pod=%s, restarts=%d)",
+                log.info("Karpenter health: OK (pod=%s, restarts=%d, no limits set)",
                          result["pod_name"], result["restarts"])
         except Exception as exc:
             log.debug("Karpenter health check failed: %s", exc)

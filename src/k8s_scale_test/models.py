@@ -114,6 +114,7 @@ class AlertType(Enum):
     RATE_DROP = "rate_drop"
     PENDING_TIMEOUT = "pending_timeout"
     NODE_NOT_READY = "node_not_ready"
+    MONITOR_GAP = "monitor_gap"
 
 
 class Severity(Enum):
