@@ -412,26 +412,60 @@ class HealthSweepAgent:
         self.evidence_store = evidence_store
         self.run_id = run_id
 
-    async def run(self, sample_size: int = 10) -> dict:
-        """Execute health sweep. Returns Sweep_Result dict."""
+    async def run(self, sample_size: int = 10, scanner_findings: list | None = None) -> dict:
+        """Execute health sweep. Returns Sweep_Result dict.
+
+        If scanner_findings are provided (from ObservabilityScanner), uses those
+        for the AMP metric layer instead of running its own PromQL queries.
+        This avoids duplicate AMP queries — the scanner already ran them
+        continuously during scaling.
+
+        The K8s condition check and SSM fallback always run independently
+        since they provide per-node detail the scanner doesn't cover.
+        """
         log.info("Node health sweep starting...")
         results: dict = {"nodes_sampled": 0, "healthy": 0, "issues": [],
                          "node_details": []}
 
         try:
-            if self.config.amp_workspace_id or self.config.prometheus_url:
-                # --- AMP / Prometheus + K8s conditions path ---
+            k8s_checker = K8sConditionChecker(self.k8s_client)
+            k8s_conditions = await k8s_checker.check_all()
+
+            if scanner_findings is not None:
+                # Use scanner findings instead of running our own AMP queries.
+                # Convert scanner ScanResults into the format _merge_results expects.
+                log.info("Health sweep: using %d scanner findings (skipping AMP queries)",
+                         len(scanner_findings))
+                scanner_issues = [
+                    f"{f.title}" for f in scanner_findings
+                    if f.severity.value in ("warning", "critical")
+                ]
+                results = {
+                    "nodes_sampled": len(k8s_conditions),
+                    "healthy": sum(1 for c in k8s_conditions if c.is_healthy),
+                    "issues": scanner_issues + [
+                        f"{c.condition}: {c.status}" for c in k8s_conditions if not c.is_healthy
+                    ],
+                    "node_details": [
+                        {"node_name": c.node_name,
+                         "status": "Healthy" if c.is_healthy else "Unhealthy",
+                         "issues": [] if c.is_healthy else [f"{c.condition}: {c.status}"]}
+                        for c in k8s_conditions
+                    ],
+                    "source": "scanner+k8s_conditions",
+                }
+                log.info("Node health sweep (scanner): %d nodes, %d healthy, %d issues",
+                         results["nodes_sampled"], results["healthy"], len(results["issues"]))
+
+            elif self.config.amp_workspace_id or self.config.prometheus_url:
+                # --- AMP / Prometheus + K8s conditions path (legacy) ---
                 amp_collector = AMPMetricCollector(
                     self.config.amp_workspace_id,
                     self.config.prometheus_url,
                     self.config.aws_profile,
                 )
-                k8s_checker = K8sConditionChecker(self.k8s_client)
 
-                amp_metrics, k8s_conditions = await asyncio.gather(
-                    amp_collector.collect_all(),
-                    k8s_checker.check_all(),
-                )
+                amp_metrics = await amp_collector.collect_all()
 
                 # Capture raw PromQL responses for evidence
                 raw_metrics: dict = {}

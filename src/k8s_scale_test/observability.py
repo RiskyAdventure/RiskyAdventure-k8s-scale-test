@@ -4,6 +4,23 @@ Runs a periodic scan loop during scaling and hold-at-peak phases,
 using the MCP servers (AMP, CloudWatch, EKS) to detect problems
 before they cause pod ready rate drops.
 
+Responsibility boundaries with other modules:
+- monitor.py: Authoritative source for pod ready rate via K8s deployment
+  watch API. The scanner does NOT track pod ready rate — it queries
+  Prometheus for fleet-wide metrics that the monitor can't see (CPU,
+  memory, disk, network, Karpenter state).
+- anomaly.py: Reactive investigation after alerts fire. Collects K8s
+  events, SSM diagnostics, ENI state. The scanner feeds findings INTO
+  the anomaly detector as early warnings — it doesn't replace the
+  deep-dive investigation.
+- health_sweep.py: One-shot node health check at hold-at-peak. When the
+  scanner is active, the health sweep consumes scanner findings instead
+  of running its own AMP queries (avoiding duplicate PromQL calls).
+  The sweep still runs its own K8s condition checks for per-node detail.
+- infra_health.py: Karpenter pod resource usage via metrics API. The
+  scanner checks Karpenter's scheduling queue and cloud provider errors
+  via Prometheus — a different signal (backlog/errors vs pod resources).
+
 Design principles:
 - Phase-aware: different queries run during different test phases
 - Tiered: Prometheus for broad sweeps, CloudWatch/EKS for drill-down
