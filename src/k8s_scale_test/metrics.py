@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Optional
 
@@ -102,19 +103,22 @@ class NodeMetricsAnalyzer:
     async def _query_node_conditions(self) -> list[NodeCondition]:
         """Get node conditions from K8s API."""
         try:
-            v1 = self.k8s_client.CoreV1Api()
-            nodes = v1.list_node(watch=False)
-            results: list[NodeCondition] = []
-            for node in nodes.items:
-                for cond in (node.status.conditions or []):
-                    results.append(NodeCondition(
-                        node_name=node.metadata.name,
-                        condition_type=cond.type,
-                        status=cond.status,
-                        reason=cond.reason or "",
-                        message=cond.message or "",
-                    ))
-            return results
+            loop = asyncio.get_event_loop()
+            def _sync():
+                v1 = self.k8s_client.CoreV1Api()
+                nodes = v1.list_node(watch=False, _request_timeout=15)
+                results: list[NodeCondition] = []
+                for node in nodes.items:
+                    for cond in (node.status.conditions or []):
+                        results.append(NodeCondition(
+                            node_name=node.metadata.name,
+                            condition_type=cond.type,
+                            status=cond.status,
+                            reason=cond.reason or "",
+                            message=cond.message or "",
+                        ))
+                return results
+            return await loop.run_in_executor(None, _sync)
         except Exception as exc:
             log.error("Failed to query node conditions: %s", exc)
             return []
@@ -127,22 +131,25 @@ class NodeMetricsAnalyzer:
     async def _query_raw_metrics(self) -> list[NodeMetric]:
         """Get basic node metrics from node status. No pod listing needed."""
         try:
-            v1 = self.k8s_client.CoreV1Api()
-            nodes = v1.list_node(watch=False)
-            results: list[NodeMetric] = []
-            for node in nodes.items:
-                name = node.metadata.name
-                cap = node.status.capacity or {}
-                alloc = node.status.allocatable or {}
-                cap_cpu = self._parse_cpu(cap.get("cpu", "0"))
-                alloc_cpu = self._parse_cpu(alloc.get("cpu", "0"))
-                cpu_pct = ((cap_cpu - alloc_cpu) / cap_cpu * 100) if cap_cpu > 0 else 0.0
-                results.append(NodeMetric(
-                    node_name=name, cpu_usage_pct=cpu_pct,
-                    memory_usage_pct=0.0, pod_count=0,
-                    pods_ready=0, pods_not_ready=0,
-                ))
-            return results
+            loop = asyncio.get_event_loop()
+            def _sync():
+                v1 = self.k8s_client.CoreV1Api()
+                nodes = v1.list_node(watch=False, _request_timeout=15)
+                results: list[NodeMetric] = []
+                for node in nodes.items:
+                    name = node.metadata.name
+                    cap = node.status.capacity or {}
+                    alloc = node.status.allocatable or {}
+                    cap_cpu = self._parse_cpu(cap.get("cpu", "0"))
+                    alloc_cpu = self._parse_cpu(alloc.get("cpu", "0"))
+                    cpu_pct = ((cap_cpu - alloc_cpu) / cap_cpu * 100) if cap_cpu > 0 else 0.0
+                    results.append(NodeMetric(
+                        node_name=name, cpu_usage_pct=cpu_pct,
+                        memory_usage_pct=0.0, pod_count=0,
+                        pods_ready=0, pods_not_ready=0,
+                    ))
+                return results
+            return await loop.run_in_executor(None, _sync)
         except Exception as exc:
             log.error("Failed to query raw metrics: %s", exc)
             return []
