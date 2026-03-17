@@ -1,0 +1,44 @@
+{
+  "run_id": "2026-03-17_10-06-13",
+  "test_start": "2026-03-17T10:06:20.223429+00:00",
+  "target_pods": 10000,
+  "namespaces": [
+    "stress-test"
+  ],
+  "current_phase": "scaling",
+  "phase_start": "2026-03-17T10:06:20.232106+00:00",
+  "amp_workspace_id": "ws-641df7c9-35d5-4cda-89e0-dc2dc873262d",
+  "cloudwatch_log_group": "/aws/containerinsights/tf-shane/dataplane",
+  "eks_cluster_name": "tf-shane",
+  "alerts": [
+    {
+      "timestamp": "2026-03-17T10:08:25.298700+00:00",
+      "alert_type": "pending_timeout",
+      "message": "Diagnostics: 10000 pods pending",
+      "current_rate": null,
+      "rolling_avg": null,
+      "ready_count": null,
+      "pending_count": null
+    }
+  ],
+  "finding_summaries": [
+    {
+      "finding_id": "finding-3adea7da",
+      "severity": "critical",
+      "symptom": "Diagnostics: 10000 pods pending",
+      "affected_resources": [
+        "memory-stress-test-74c584bd59-hq4hn",
+        "cpu-stress-test-6599f75dfc-2kgj8",
+        "cpu-stress-test-6599f75dfc-kcp4m",
+        "iperf3-client-746bb64787-wjb42",
+        "iperf3-server-7cf5f5465f-s9l5p",
+        "iperf3-client-746bb64787-9kgkm",
+        "iperf3-client-746bb64787-lwwrk",
+        "sysctl-connection-test-74945d8df5-pmqzb",
+        "iperf3-client-746bb64787-hxsvj",
+        "sysctl-connection-test-74945d8df5-c7xlr"
+      ]
+    }
+  ],
+  "evidence_dir": "scale-test-results/2026-03-17_10-06-13"
+}

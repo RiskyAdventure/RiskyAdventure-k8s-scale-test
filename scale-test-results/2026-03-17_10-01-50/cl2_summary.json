@@ -1,0 +1,36 @@
+{
+  "test_status": {
+    "config_name": "mixed-workload",
+    "job_name": "cl2-mixed-workload",
+    "status": "Failed",
+    "duration_seconds": 2.4733,
+    "error_message": "CL2 failed after 2s"
+  },
+  "preload_plan": {
+    "target_pods": 10000,
+    "namespaces": 125,
+    "deployments_per_ns": 2,
+    "pod_replicas": 0,
+    "services_per_ns": 2,
+    "configmaps_per_ns": 26,
+    "secrets_per_ns": 80,
+    "total_deployments": 250,
+    "total_pods": 0,
+    "total_services": 250,
+    "total_configmaps": 9750,
+    "total_secrets": 10000,
+    "total_objects": 20375,
+    "actual_namespaces": 125,
+    "actual_deployments": 0,
+    "actual_pods": 0,
+    "actual_services": 0,
+    "actual_configmaps": 125,
+    "actual_secrets": 0,
+    "actual_total": 250
+  },
+  "pod_startup_latencies": [],
+  "api_latencies": [],
+  "api_availability": null,
+  "scheduling_throughput": null,
+  "raw_results": {}
+}
