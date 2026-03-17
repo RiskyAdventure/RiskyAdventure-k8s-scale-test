@@ -1,0 +1,4 @@
+# file: /Users/shancor/Projects/flux/src/k8s_scale_test/monitor.py
+# hypothesis_version: 6.141.1
+
+[0.0, 0.01, 2.0, 5.0, 100, 300, '410', 'ADDED', 'BOOKMARK', 'DELETED', 'Gone', 'Ticker error: %s', 'current_rate', 'object', 'pending', 'ready', 'resource_version', 'rolling_avg', 'timeout_seconds', 'type']

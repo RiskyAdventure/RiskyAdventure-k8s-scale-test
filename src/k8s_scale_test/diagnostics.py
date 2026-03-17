@@ -143,29 +143,40 @@ class NodeDiagnosticsCollector:
 
     # Keep the old single-command method for the CNI analyzer's IPAMD log collection
     async def run_single_command(self, instance_id: str, command: str) -> SSMCommandResult:
-        """Run one SSM command and wait for result."""
+        """Run one SSM command and wait for result.
+
+        All boto3 calls run in thread executor so they don't block the
+        async event loop.
+        """
+        loop = asyncio.get_event_loop()
         ssm = self._get_ssm()
-        try:
-            resp = ssm.send_command(
-                InstanceIds=[instance_id],
-                DocumentName="AWS-RunShellScript",
-                Parameters={"commands": [command]},
-                TimeoutSeconds=30,
-            )
-            cmd_id = resp["Command"]["CommandId"]
-            for _ in range(30):
-                await asyncio.sleep(1)
-                inv = ssm.get_command_invocation(CommandId=cmd_id, InstanceId=instance_id)
-                if inv["Status"] in ("Success", "Failed", "TimedOut", "Cancelled"):
-                    return SSMCommandResult(
-                        instance_id=instance_id, command=command,
-                        command_id=cmd_id, status=inv["Status"],
-                        output=inv.get("StandardOutputContent", ""),
-                        error=inv.get("StandardErrorContent", ""))
-            return SSMCommandResult(instance_id=instance_id, command=command,
-                                    command_id=cmd_id, status="TimedOut", output="",
-                                    error="Timed out after 30s")
-        except Exception as exc:
-            return SSMCommandResult(instance_id=instance_id, command=command,
-                                    command_id="", status="Failed", output="",
-                                    error=str(exc))
+
+        def _execute():
+            """Synchronous SSM send + poll — runs entirely in thread."""
+            import time
+            try:
+                resp = ssm.send_command(
+                    InstanceIds=[instance_id],
+                    DocumentName="AWS-RunShellScript",
+                    Parameters={"commands": [command]},
+                    TimeoutSeconds=30,
+                )
+                cmd_id = resp["Command"]["CommandId"]
+                for _ in range(30):
+                    time.sleep(1)
+                    inv = ssm.get_command_invocation(CommandId=cmd_id, InstanceId=instance_id)
+                    if inv["Status"] in ("Success", "Failed", "TimedOut", "Cancelled"):
+                        return SSMCommandResult(
+                            instance_id=instance_id, command=command,
+                            command_id=cmd_id, status=inv["Status"],
+                            output=inv.get("StandardOutputContent", ""),
+                            error=inv.get("StandardErrorContent", ""))
+                return SSMCommandResult(instance_id=instance_id, command=command,
+                                        command_id=cmd_id, status="TimedOut", output="",
+                                        error="Timed out after 30s")
+            except Exception as exc:
+                return SSMCommandResult(instance_id=instance_id, command=command,
+                                        command_id="", status="Failed", output="",
+                                        error=str(exc))
+
+        return await loop.run_in_executor(None, _execute)

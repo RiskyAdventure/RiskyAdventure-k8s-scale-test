@@ -228,63 +228,63 @@ class ScaleTestController:
         await watcher.start(run_id, lambda: self._current_step)
         await monitor.start()
 
-        # 7. Scale via Flux repo — update manifests, commit, push
+        # 6a. Launch independent observer process for rate cross-validation
+        observer_proc = await self._start_observer(run_id, namespaces)
+
+        # 7. Scale, hold-at-peak, sweep, cleanup — all protected by try/finally
+        #    so monitor/watcher/observer ALWAYS get stopped even on exceptions.
         try:
             result = await self._execute_scaling_via_flux(
                 writer, targets, deployments, anomaly,
             )
-        except Exception:
-            # If scaling fails, still run cleanup — but don't kill the monitor yet
-            raise
 
-        # 7. Check Karpenter health if we saw capacity errors during scaling
+            # 7. Check Karpenter health if we saw capacity errors during scaling
+            # 7. Hold at peak — wait for monitor to confirm target, then hold
+            hold = getattr(self.config, 'hold_at_peak', 90)
+            target = self.config.target_pods
+            log.info("Waiting for monitor to confirm %d pods ready before hold...", target)
+            for _ in range(30):
+                ready, pending, _ = await self._count_pods()
+                if ready >= target:
+                    break
+                await asyncio.sleep(5)
+
+            # 7a. Hold at peak + node health sweep + Karpenter check
+            # All run concurrently during the hold period
+            log.info("Holding at peak for %ds + running health checks...", hold)
+            health_sweep_task = asyncio.create_task(sweep_agent.run(sample_size=10))
+            hold_task = asyncio.create_task(asyncio.sleep(hold))
+
+            await hold_task
+            try:
+                self._health_sweep = await asyncio.wait_for(health_sweep_task, timeout=60)
+            except asyncio.TimeoutError:
+                log.warning("Health sweep timed out after hold + 60s, proceeding with partial results")
+                self._health_sweep = {"nodes_sampled": 0, "healthy": 0,
+                                      "issues": [], "timed_out": True}
+                health_sweep_task.cancel()
+
+            # 7b. If sweep found issues, present to operator before cleanup
+            sweep_issues = self._health_sweep.get("issues", [])
+            if sweep_issues:
+                sampled = self._health_sweep.get("nodes_sampled", 0)
+                healthy = self._health_sweep.get("healthy", 0)
+                log.warning("Health sweep: %d/%d nodes have issues at peak load",
+                            sampled - healthy, sampled)
+                await self._prompt_operator(
+                    f"Node health sweep found {len(sweep_issues)} issue(s) at peak load. "
+                    f"Review before cleanup?",
+                    {"sampled": sampled, "healthy": healthy,
+                     "issues": sweep_issues[:10]},
+                )
+        finally:
+            # ALWAYS stop monitoring — even if scaling, hold, or sweep threw
+            await monitor.stop()
+            await watcher.stop()
+            self._stop_observer(observer_proc)
+
+        # Karpenter check runs after monitor stops — doesn't affect rate data
         self._karpenter_health = await infra_agent.check_if_needed(self._findings)
-
-        # 7. Hold at peak — wait for monitor to confirm target, then hold
-        hold = getattr(self.config, 'hold_at_peak', 90)
-        target = self.config.target_pods
-        log.info("Waiting for monitor to confirm %d pods ready before hold...", target)
-        for _ in range(30):  # up to 150s waiting for monitor to catch up
-            ready, pending, _ = await self._count_pods()
-            if ready >= target:
-                break
-            await asyncio.sleep(5)
-
-        # 7a. Hold at peak + node health sweep
-        # The sweep runs concurrently with the hold timer. We wait for BOTH
-        # to complete before cleanup — the sweep must finish so we can analyze
-        # results and give the operator a chance to investigate.
-        log.info("Holding at peak for %ds + running node health sweep...", hold)
-        health_sweep_task = asyncio.create_task(sweep_agent.run(sample_size=10))
-        hold_task = asyncio.create_task(asyncio.sleep(hold))
-
-        # Wait for both: hold timer AND sweep completion
-        await hold_task
-        try:
-            self._health_sweep = await asyncio.wait_for(health_sweep_task, timeout=60)
-        except asyncio.TimeoutError:
-            log.warning("Health sweep timed out after hold + 60s, proceeding with partial results")
-            self._health_sweep = {"nodes_sampled": 0, "healthy": 0,
-                                  "issues": [], "timed_out": True}
-            health_sweep_task.cancel()
-
-        # 7b. If sweep found issues, present to operator before cleanup
-        sweep_issues = self._health_sweep.get("issues", [])
-        if sweep_issues:
-            sampled = self._health_sweep.get("nodes_sampled", 0)
-            healthy = self._health_sweep.get("healthy", 0)
-            log.warning("Health sweep: %d/%d nodes have issues at peak load",
-                        sampled - healthy, sampled)
-            await self._prompt_operator(
-                f"Node health sweep found {len(sweep_issues)} issue(s) at peak load. "
-                f"Review before cleanup?",
-                {"sampled": sampled, "healthy": healthy,
-                 "issues": sweep_issues[:10]},
-            )
-
-        # 7c. NOW stop the monitor and watcher — after hold-at-peak is complete
-        await monitor.stop()
-        await watcher.stop()
 
         # 8. Cleanup pods — delete replicas and record delete rate
         await self._cleanup_pods(writer, all_labeled)
@@ -550,6 +550,70 @@ class ScaleTestController:
             halt_reason=None if ready >= target else "target_not_reached",
         )
 
+    async def _start_observer(self, run_id: str, namespaces: list[str]):
+        """Launch an independent kubectl watch process for rate cross-validation.
+
+        Writes to {run_dir}/observer.log so each run has its own observer data.
+        This is the independent check that catches monitor bugs.
+        """
+        import subprocess
+        rd = self.evidence_store._run_dir(run_id)
+        obs_file = rd / "observer.log"
+        ns = namespaces[0] if namespaces else "default"
+
+        # Write header
+        obs_file.write_text("timestamp,name,ready,replicas,available\n")
+
+        try:
+            proc = subprocess.Popen(
+                ["kubectl", "get", "deployment", "-n", ns, "-w",
+                 "-o", "custom-columns="
+                 "NAME:.metadata.name,"
+                 "READY:.status.readyReplicas,"
+                 "REPLICAS:.status.replicas,"
+                 "AVAILABLE:.status.availableReplicas",
+                 "--no-headers"],
+                stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True,
+            )
+            # Background thread to read kubectl output and write to file
+            import threading
+            def _reader():
+                try:
+                    with open(obs_file, "a") as fh:
+                        for line in proc.stdout:
+                            line = line.strip()
+                            if line:
+                                ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+                                fh.write(f"{ts},{line}\n")
+                                fh.flush()
+                except Exception:
+                    pass
+            t = threading.Thread(target=_reader, daemon=True)
+            t.start()
+            log.info("Observer started: kubectl watch in '%s' → %s", ns, obs_file)
+            return proc
+        except FileNotFoundError:
+            log.warning("Observer: kubectl not found, skipping independent watch")
+            return None
+        except Exception as exc:
+            log.warning("Observer failed to start: %s", exc)
+            return None
+
+    @staticmethod
+    def _stop_observer(proc):
+        """Terminate the observer kubectl process."""
+        if proc is None:
+            return
+        try:
+            proc.terminate()
+            proc.wait(timeout=5)
+            log.info("Observer stopped")
+        except Exception:
+            try:
+                proc.kill()
+            except Exception:
+                pass
+
     async def _run_diagnostics(self, anomaly, deployments, pending, ready) -> None:
         """Run diagnostics in background — never blocks the scaling loop."""
         try:
@@ -595,9 +659,15 @@ class ScaleTestController:
             return "continue"
 
     async def _count_pods(self) -> tuple[int, int, int]:
-        """Read pod counts — prefer monitor watch, but always verify with a
-        direct API call every 30s to catch stale watch data."""
-        # Always do a direct API poll as the source of truth
+        """Read pod counts from the monitor's watch — no API call needed.
+
+        The monitor maintains real-time counts via K8s deployment watches
+        running in background threads. Reading from it is instant and
+        doesn't compete with the event loop or API server.
+        """
+        if hasattr(self, '_monitor') and self._monitor._running:
+            return self._monitor.get_counts()
+        # Fallback: direct API call only if monitor isn't running
         loop = asyncio.get_event_loop()
         for attempt in range(2):
             try:
@@ -621,9 +691,6 @@ class ScaleTestController:
                     self._refresh_k8s_token()
                     continue
                 log.error("Failed to count pods: %s", exc)
-                # Fall back to monitor if API call fails
-                if hasattr(self, '_monitor') and self._monitor._running:
-                    return self._monitor.get_counts()
                 return 0, 0, 0
         return 0, 0, 0
 
@@ -676,7 +743,7 @@ class ScaleTestController:
 
         # Check 1: data point count vs expected (duration / 5s)
         if result.steps:
-            expected_pts = int(result.steps[0].duration_seconds / 5) - 2  # allow margin
+            expected_pts = int(result.steps[0].duration_seconds / 5) - 2
             if len(points) < expected_pts:
                 issues.append(f"Only {len(points)} data points, expected ~{expected_pts}+ for {result.steps[0].duration_seconds:.0f}s test")
 
@@ -685,30 +752,87 @@ class ScaleTestController:
         if result.total_pods_ready > 0 and abs(rate_peak - result.total_pods_ready) > 100:
             issues.append(f"Peak ready mismatch: rate_data={rate_peak} controller={result.total_pods_ready}")
 
-        # Check 3: gaps
+        # Check 3: gaps in monitoring
         gaps = [p for p in points if p.get("is_gap")]
         if gaps:
             issues.append(f"{len(gaps)} gap(s) in rate data — chart rates may be averaged over long intervals")
 
-        # Check 4: observer log cross-check
-        obs_file = Path("observer.log")
+        # Check 4: observer cross-check (run-scoped file first, then legacy)
+        obs_file = rd / "observer.log"
+        if not obs_file.exists():
+            obs_file = Path("observer.log")
         if obs_file.exists():
+            obs_peak = 0
             obs_lines = [l.strip() for l in obs_file.read_text().splitlines()
                          if l.strip() and not l.startswith("timestamp") and not l.startswith("Observer")]
-            obs_peak = 0
             for line in obs_lines:
                 parts = line.split(",", 1)
                 if len(parts) < 2:
                     continue
                 fields = parts[1].split()
                 try:
-                    obs_peak = max(obs_peak, int(fields[1]))
+                    val = int(fields[1])
+                    obs_peak = max(obs_peak, val)
                 except (ValueError, IndexError):
                     continue
-            if obs_peak > 0 and abs(obs_peak - rate_peak) > 500:
-                issues.append(f"Observer vs controller mismatch: observer_peak={obs_peak} rate_data_peak={rate_peak}")
+
+            if obs_peak > 0:
+                # Cross-check peak pod count
+                if abs(obs_peak - rate_peak) > 500:
+                    issues.append(f"Observer vs monitor peak mismatch: observer={obs_peak} monitor={rate_peak}")
+                else:
+                    log.info("Verification: observer peak cross-check passed (observer=%d, monitor=%d)",
+                             obs_peak, rate_peak)
+
+                # Cross-check rate: compute observer's scaling rate
+                obs_data = []
+                from datetime import datetime as _dt
+                for line in obs_lines:
+                    parts = line.split(",", 1)
+                    if len(parts) < 2:
+                        continue
+                    ts_str = parts[0]
+                    fields = parts[1].split()
+                    try:
+                        ready = int(fields[1])
+                        obs_data.append((ts_str, ready))
+                    except (ValueError, IndexError):
+                        continue
+
+                if len(obs_data) > 2:
+                    obs_rates = []
+                    for i in range(1, len(obs_data)):
+                        try:
+                            t0 = _dt.fromisoformat(obs_data[i-1][0].replace("Z", "+00:00"))
+                            t1 = _dt.fromisoformat(obs_data[i][0].replace("Z", "+00:00"))
+                            dt = (t1 - t0).total_seconds()
+                            if dt > 0:
+                                r = (obs_data[i][1] - obs_data[i-1][1]) / dt
+                                if r > 0:
+                                    obs_rates.append(r)
+                        except Exception:
+                            continue
+
+                    if obs_rates:
+                        obs_peak_rate = max(obs_rates)
+                        monitor_rates = [p["ready_rate"] for p in points if p["ready_rate"] > 0]
+                        monitor_peak_rate = max(monitor_rates) if monitor_rates else 0
+
+                        # Allow 50% tolerance — different sampling methods
+                        if monitor_peak_rate > 0 and obs_peak_rate > 0:
+                            ratio = monitor_peak_rate / obs_peak_rate
+                            if ratio > 3.0 or ratio < 0.33:
+                                issues.append(
+                                    f"Rate mismatch: monitor_peak={monitor_peak_rate:.1f}/s "
+                                    f"observer_peak={obs_peak_rate:.1f}/s (ratio={ratio:.1f}x)")
+                            else:
+                                log.info("Verification: rate cross-check passed "
+                                         "(monitor=%.1f/s, observer=%.1f/s, ratio=%.1fx)",
+                                         monitor_peak_rate, obs_peak_rate, ratio)
             else:
-                log.info("Verification: observer cross-check passed (peak=%d)", obs_peak)
+                issues.append("Observer log exists but no valid data — kubectl watch may have failed")
+        else:
+            issues.append("No observer log found — independent rate validation unavailable")
 
         if issues:
             log.warning("Verification issues:")

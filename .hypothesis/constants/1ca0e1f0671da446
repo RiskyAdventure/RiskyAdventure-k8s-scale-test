@@ -1,0 +1,4 @@
+# file: /Users/shancor/Projects/flux/src/k8s_scale_test/cl2_parser.py
+# hypothesis_version: 6.141.1
+
+[0.0, '*.json', '0', 'Count', 'Metric', 'P50', 'P90', 'P99', 'Parsed', 'Perc50', 'Perc90', 'Perc99', 'PodStartupLatency', 'Resource', 'Scope', 'Verb', 'api_responsiveness', 'clusterMetrics', 'data', 'dataItems', 'labels', 'pod_startup_latency', 'unknown']

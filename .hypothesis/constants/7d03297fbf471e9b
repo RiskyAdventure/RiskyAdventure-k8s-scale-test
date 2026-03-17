@@ -1,0 +1,4 @@
+# file: /Users/shancor/Projects/flux/src/k8s_scale_test/diagnostics.py
+# hypothesis_version: 6.141.1
+
+['/', 'AWS-RunShellScript', 'Cancelled', 'Command', 'CommandId', 'Failed', 'Skipped', 'StandardErrorContent', 'Status', 'Success', 'Timed out after 30s', 'TimedOut', 'client', 'commands', 'containerd_logs', 'journal_containerd', 'journal_kubelet', 'kubelet_logs', 'resource_utilization', 'send_command failed', 'ssm']

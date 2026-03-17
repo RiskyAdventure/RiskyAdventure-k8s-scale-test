@@ -1,0 +1,4 @@
+# file: /Users/shancor/Projects/flux/src/k8s_scale_test/evidence.py
+# hypothesis_version: 6.141.1
+
+['%Y%m%d%H%M%S', '%Y-%m-%d_%H-%M-%S', '*.json', '.json', '.jsonl', 'a', 'cl2_summary.json', 'config.json', 'diagnostics', 'events.jsonl', 'findings', 'involved_object_kind', 'involved_object_name', 'namespace', 'preflight.json', 'r', 'rate_data.jsonl', 'reason', 'summary.json']

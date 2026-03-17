@@ -1,0 +1,4 @@
+# file: /Users/shancor/Projects/flux/src/k8s_scale_test/events.py
+# hypothesis_version: 6.141.1
+
+[300, '410', 'BOOKMARK', 'Gone', 'Normal', 'Warning', 'object', 'resource_version', 'timeout_seconds', 'type']

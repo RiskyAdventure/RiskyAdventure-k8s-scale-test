@@ -29,8 +29,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p.add_argument("--auto-approve", action="store_true", help="Auto-approve preflight and operator prompts")
     p.add_argument("--exclude-apps", type=str, default="", help="Comma-separated app names to exclude from scaling")
     p.add_argument("--include-apps", type=str, default="", help="Comma-separated app names to include (only these will scale)")
-    p.add_argument("--cl2-preload", type=str, default=None,
-                   help="CL2 config template name for preload phase (e.g., mixed-workload)")
+    p.add_argument("--cl2-preload", type=str, default="mixed-workload",
+                   help="CL2 config template name for preload phase (default: mixed-workload)")
     p.add_argument("--cl2-timeout", type=float, default=3600.0,
                    help="CL2 Job timeout in seconds (default: 3600)")
     p.add_argument("--cl2-params", type=str, default=None,

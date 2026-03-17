@@ -1,0 +1,4 @@
+# file: /Users/shancor/Projects/flux/src/k8s_scale_test/models.py
+# hypothesis_version: 6.141.1
+
+[0.0, 1.5, 2.0, 10.0, 30.0, 50.0, 120.0, 3600.0, 500, './scale-test-results', 'CL2PreloadPlan', 'T', '__args__', '__origin__', 'critical', 'from_dict', 'go', 'info', 'invalid', 'no_go', 'node_not_ready', 'pending_timeout', 'rate_drop', 'to_dict', 'valid', 'warning']

@@ -1,0 +1,4 @@
+# file: /Users/shancor/Projects/flux/src/k8s_scale_test/cli.py
+# hypothesis_version: 6.141.1
+
+[1.5, 2.0, 600.0, 3600.0, 130, ')', ',', '--auto-approve', '--aws-profile', '--cl2-params', '--cl2-preload', '--cl2-timeout', '--exclude-apps', '--flux-repo-path', '--format', '--hold-at-peak', '--include-apps', '--kubeconfig', '--output-dir', '--pending-timeout', '--prometheus-url', '--stressor-weights', '--target-pods', '--verbose', '-v', './scale-test-results', '0 prefixes', ';', '=', 'FailedScheduling=', 'IAM auth failure', 'IPAMD failure', 'Target pod count', '__main__', 'aws', 'boto3', 'botocore', 'configure', 'env', 'export ', 'export-credentials', 'k8s-scale-test', 'k8s_scale_test', 'kubernetes', 'on ', 'profile_name', 'store_true', 'truly unscheduled', 'urllib3', 'zero_prefix=']

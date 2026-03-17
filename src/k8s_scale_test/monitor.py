@@ -50,9 +50,26 @@ class PodRateMonitor:
     def on_alert(self, cb): self._alert_callbacks.append(cb)
 
     async def _safe_callback(self, cb, alert):
-        try: await cb(alert)
-        except Exception as e: log.error("Alert callback error: %s", e)
-        finally: self._alert_in_flight = False
+        """Run alert callback in a separate thread so it never blocks the ticker.
+
+        The anomaly detector's handle_alert does multiple K8s API calls and
+        SSM commands that can take 5-10s. Running it on the main event loop
+        would starve the ticker. Instead, we spin up a fresh event loop in
+        a thread — the callback gets full async support without competing
+        with the monitor.
+        """
+        def _run_in_thread():
+            loop = asyncio.new_event_loop()
+            try:
+                loop.run_until_complete(cb(alert))
+            except Exception as e:
+                log.error("Alert callback error: %s", e)
+            finally:
+                loop.close()
+                self._alert_in_flight = False
+
+        t = threading.Thread(target=_run_in_thread, daemon=True)
+        t.start()
 
     def _extract(self, dep):
         r = dep.status.replicas or 0; rd = dep.status.ready_replicas or 0
