@@ -115,30 +115,28 @@ class PodRateMonitor:
         """Spin up watch threads and the ticker loop.
 
         Creates one daemon thread per namespace (deployment watch), one
-        daemon thread for node watch, and one asyncio task for the ticker.
+        daemon thread for node watch, and one daemon thread for the ticker.
         All threads are daemon threads so they die automatically if the
         main process exits.
         """
         self._running = True
+        self._event_loop = asyncio.get_event_loop()
         for ns in self.namespaces:
             t = threading.Thread(target=self._watch_deployments, args=(ns,), daemon=True)
             t.start(); self._threads.append(t)
         t = threading.Thread(target=self._watch_nodes, daemon=True)
         t.start(); self._threads.append(t)
-        self._ticker_task = asyncio.create_task(self._ticker_loop())
+        t = threading.Thread(target=self._ticker_thread, daemon=True, name="monitor-ticker")
+        t.start(); self._threads.append(t)
 
     async def stop(self):
-        """Signal all threads and the ticker to stop.
+        """Signal all threads to stop.
 
-        Sets ``_running = False`` which causes watch threads to exit their
-        loops, then cancels the ticker task. Watch threads are daemon threads
-        so they'll be cleaned up even if they don't exit promptly.
+        Sets ``_running = False`` which causes watch threads and the ticker
+        thread to exit their loops. All threads are daemon threads so they'll
+        be cleaned up even if they don't exit promptly.
         """
         self._running = False
-        if self._ticker_task:
-            self._ticker_task.cancel()
-            try: await self._ticker_task
-            except asyncio.CancelledError: pass
 
     def get_current_rate(self):
         """Return the most recent pods-per-second ready rate."""
@@ -379,8 +377,12 @@ class PodRateMonitor:
         """
         return sum(d.ready_rate for d in self._window) / len(self._window) if self._window else 0.0
 
-    async def _ticker_loop(self):
-        """Main sampling loop — runs as an asyncio task, wakes every 5 seconds.
+    def _ticker_thread(self):
+        """Main sampling loop — runs in its own thread, sleeps every 5 seconds.
+
+        Completely independent of the asyncio event loop. This ensures that
+        even if the event loop is blocked by investigation work, rate data
+        points are still recorded on schedule.
 
         Each tick:
         1. Reads the latest counts from the watch threads (thread-safe via lock).
@@ -411,20 +413,15 @@ class PodRateMonitor:
                 is_gap = elapsed > self._TICK_INTERVAL * self._GAP_THRESHOLD and not first
 
                 # Detect bulk state jump from a watch reconnect re-list.
-                # When a watch thread reconnects and does a full list_namespaced_deployment,
-                # _ready can jump by thousands in one shot. The delta belongs to the entire
-                # disconnection period, not just the last 5s tick. Mark it as a gap so the
-                # rate is attributed correctly.
                 relist_gap = False
                 if relist_time and relist_time != last_seen_relist and not first:
                     delta = ready - prev_ready
-                    if abs(delta) > 100:  # significant jump coinciding with re-list
+                    if abs(delta) > 100:
                         is_gap = True
                         relist_gap = True
                         log.debug("Ticker: relist detected, delta_ready=%d marked as gap", delta)
                     last_seen_relist = relist_time
 
-                # Skip recording during hold-at-peak: pending == 0 and ready is stable
                 is_hold = not first and pending == 0 and ready > 0 and ready == prev_ready
 
                 rate = 0.0 if first else self._compute_rate(prev_ready, ready, elapsed)
@@ -438,7 +435,6 @@ class PodRateMonitor:
                 while self._window and self._window[0].timestamp.timestamp() < cutoff: self._window.popleft()
                 ra = self._rolling_average()
 
-                # Don't record hold-at-peak data points — they add noise
                 if not is_hold:
                     dp = RateDataPoint(timestamp=now, ready_count=ready, delta_ready=ready-prev_ready,
                         ready_rate=rate, rolling_avg_rate=ra, pending_count=pending, total_pods=total,
@@ -446,9 +442,6 @@ class PodRateMonitor:
                     self._time_series.append(dp)
                     self.evidence_store.append_rate_datapoint(self.run_id, dp)
 
-                # Alert the anomaly detector when a watch reconnect causes a monitoring gap.
-                # This lets it investigate what caused the watch to break (API server pressure,
-                # token expiry, network issues) rather than silently losing data.
                 if relist_gap and not self._alert_in_flight:
                     self._alert_in_flight = True
                     delta = ready - prev_ready
@@ -460,19 +453,33 @@ class PodRateMonitor:
                                  "namespaces": self.namespaces})
                     log.warning("Monitor gap: %.0fs blind spot, delta_ready=%d (watch reconnect)",
                                 elapsed, delta)
-                    for cb in self._alert_callbacks: asyncio.create_task(self._safe_callback(cb, a))
+                    self._dispatch_alert(a)
 
                 mr = max(100, self.config.target_pods * 0.01)
-                # Suppress rate drop alerts when we're near the target — the rate
-                # naturally drops to zero as the last few pods come online. Alerting
-                # on this wastes anomaly detector cycles investigating a non-issue.
                 near_target = self.config.target_pods > 0 and ready >= self.config.target_pods * 0.95
                 if not first and not is_gap and not is_hold and not near_target and pending > 0 and ready > mr and not self._alert_in_flight and self._check_threshold(rate, ra):
                     self._alert_in_flight = True
                     a = Alert(alert_type=AlertType.RATE_DROP, timestamp=now,
                         message=f"Ready rate {rate:.2f}/s dropped below threshold (rolling avg {ra:.2f}/s)",
                         context={"current_rate": rate, "rolling_avg": ra, "ready": ready, "pending": pending})
-                    for cb in self._alert_callbacks: asyncio.create_task(self._safe_callback(cb, a))
+                    self._dispatch_alert(a)
                 prev_ready, prev_time = ready, now
             except Exception as e: log.error("Ticker error: %s", e)
-            await asyncio.sleep(self._TICK_INTERVAL)
+            _time.sleep(self._TICK_INTERVAL)
+
+    def _dispatch_alert(self, alert):
+        """Fire alert callbacks from the ticker thread.
+
+        Each callback runs in its own thread (via _safe_callback) so it
+        never blocks the ticker. We use call_soon_threadsafe to schedule
+        the callback dispatch on the main event loop.
+        """
+        for cb in self._alert_callbacks:
+            try:
+                self._event_loop.call_soon_threadsafe(
+                    asyncio.ensure_future,
+                    self._safe_callback(cb, alert),
+                )
+            except RuntimeError:
+                # Event loop closed — test is shutting down
+                pass

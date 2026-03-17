@@ -6,6 +6,7 @@ import asyncio
 import logging
 import math
 import os
+import threading
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -778,7 +779,17 @@ class ScaleTestController:
             if not diag_done and elapsed > 60 and pending > 0:
                 diag_done = True
                 log.info("Running diagnostics — %d pods pending after %.0fs", pending, elapsed)
-                asyncio.create_task(self._run_diagnostics(anomaly, deployments, pending, ready))
+                # Run in a separate thread with its own event loop so it never
+                # blocks the controller's polling loop or the monitor's ticker.
+                def _diag_thread():
+                    loop = asyncio.new_event_loop()
+                    try:
+                        loop.run_until_complete(self._run_diagnostics(anomaly, deployments, pending, ready))
+                    except Exception as e:
+                        log.error("Diagnostics thread failed: %s", e)
+                    finally:
+                        loop.close()
+                threading.Thread(target=_diag_thread, daemon=True, name="diagnostics").start()
 
             if pending == 0 and ready >= target:
                 break
