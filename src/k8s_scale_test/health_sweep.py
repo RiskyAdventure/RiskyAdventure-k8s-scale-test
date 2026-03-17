@@ -280,19 +280,37 @@ class AMPMetricCollector:
     # ------------------------------------------------------------------
 
     async def _query_promql(self, query: str) -> dict:
-        """Execute a single PromQL instant query. Returns raw Prometheus JSON response."""
+        """Execute a single PromQL instant query. Returns raw Prometheus JSON response.
+
+        Retries once on HTTP 403 after forcing a credential refresh, which
+        handles SSO/STS token expiry during long-running tests.
+        """
         params = urllib.parse.urlencode({"query": query})
         url = f"{self._endpoint}?{params}"
 
-        req = urllib.request.Request(url, method="GET")
-        req.add_header("Accept", "application/json")
+        for attempt in range(2):
+            req = urllib.request.Request(url, method="GET")
+            req.add_header("Accept", "application/json")
 
-        if self._use_sigv4:
-            self._sign_request(req, url)
+            if self._use_sigv4:
+                self._sign_request(req, url)
 
-        loop = asyncio.get_event_loop()
-        response_body: bytes = await loop.run_in_executor(None, self._do_http, req)
-        return json.loads(response_body)
+            try:
+                loop = asyncio.get_event_loop()
+                response_body: bytes = await loop.run_in_executor(None, self._do_http, req)
+                return json.loads(response_body)
+            except urllib.error.HTTPError as e:
+                if e.code == 403 and attempt == 0 and self._boto3_session:
+                    log.warning("AMP query got 403, refreshing credentials and retrying")
+                    # Force boto3 to re-resolve credentials (handles SSO expiry)
+                    import boto3
+                    session_kwargs = {}
+                    if self._boto3_session.profile_name:
+                        session_kwargs["profile_name"] = self._boto3_session.profile_name
+                    self._boto3_session = boto3.Session(**session_kwargs)
+                    self._credentials = self._boto3_session._session.get_credentials()
+                    continue
+                raise
 
     def _sign_request(self, req: urllib.request.Request, url: str) -> None:
         """Apply SigV4 signature headers to *req*.

@@ -158,6 +158,7 @@ class ScaleTestController:
         self._health_sweep: dict = {}
         self._karpenter_health: dict = {}
         self._ctx_writer: ContextFileWriter | None = None
+        self._running = True  # Used by observer thread to know when to stop
         self._scanner: ObservabilityScanner | None = None
         self._scanner_task: asyncio.Task | None = None
         self._scanner_findings: list[ScanResult] = []
@@ -367,7 +368,7 @@ class ScaleTestController:
         sweep_agent = HealthSweepAgent(self.config, self.k8s_client, node_diag, self.evidence_store, run_id)
         infra_agent = InfraHealthAgent(self.k8s_client)
         monitor.on_alert(anomaly.handle_alert)
-        watcher = EventWatcher(self.k8s_client, namespaces, self.evidence_store)
+        watcher = EventWatcher(self.k8s_client, namespaces, self.evidence_store, config=self.config)
 
         # 5a. Set up agent context writer for AI sub-agent integration
         try:
@@ -471,6 +472,7 @@ class ScaleTestController:
                 )
         finally:
             # ALWAYS stop monitoring — even if scaling, hold, or sweep threw
+            self._running = False  # Signal observer thread to exit
             await monitor.stop()
             await watcher.stop()
             self._stop_observer(observer_proc)

@@ -31,16 +31,20 @@ class EventWatcher:
         k8s_client,
         namespaces: list[str],
         evidence_store: EvidenceStore,
+        config=None,
     ) -> None:
         self.k8s_client = k8s_client
         self.namespaces = namespaces
         self.evidence_store = evidence_store
+        self.config = config
         self._running = False
         self._threads: list[threading.Thread] = []
         self._run_id: str = ""
         self._step_tracker: Callable[[], int] = lambda: 0
         self._seen: set[str] = set()
         self._lock = threading.Lock()
+        self._token_refresh_lock = threading.Lock()
+        self._last_token_refresh = 0.0
 
     async def start(
         self, run_id: str, scaling_step_tracker: Callable[[], int],
@@ -135,7 +139,25 @@ class EventWatcher:
                         log.debug("Event watch %s: resource_version expired, re-listing",
                                   namespace)
                         resource_version = None
+                    elif any(x in str(exc) for x in ("Unauthorized", "401", "ExpiredToken")):
+                        self._try_refresh_token()
+                        v1 = self.k8s_client.CoreV1Api()
                     else:
                         log.debug("Event watch reconnecting for %s: %s",
                                   namespace, type(exc).__name__)
                     time.sleep(2)
+
+    def _try_refresh_token(self) -> None:
+        """Refresh K8s token with cooldown to avoid thundering herd."""
+        import time as _time
+        now = _time.monotonic()
+        with self._token_refresh_lock:
+            if now - self._last_token_refresh < 30.0:
+                return
+            if self.config and hasattr(self.config, '_k8s_reload'):
+                try:
+                    self.config._k8s_reload()
+                    self._last_token_refresh = _time.monotonic()
+                    log.info("EventWatcher: K8s token refreshed")
+                except Exception as e:
+                    log.warning("EventWatcher: token refresh failed: %s", e)
