@@ -1,0 +1,192 @@
+2026-03-17 10:39:50,080 INFO     k8s_scale_test.controller: Test run 2026-03-17_17-39-50 started
+2026-03-17 10:39:50,081 INFO     k8s_scale_test.controller: Preflight: including 0 CL2 preload pods (30000 total with 30000 target)
+2026-03-17 10:39:50,081 INFO     k8s_scale_test.preflight: Starting preflight checks...
+2026-03-17 10:39:52,953 INFO     k8s_scale_test.preflight:   Live node allocatable for i4i.8xlarge: cpu=30000m, memory=238155Mi (from ip-100-64-118-97.us-west-2.compute.internal)
+2026-03-17 10:39:52,954 INFO     k8s_scale_test.preflight:   Overriding CRD allocatable (32000m/262144Mi) with live node (30000m/238155Mi) from i4i.8xlarge
+2026-03-17 10:39:52,954 INFO     k8s_scale_test.preflight:   Stressor sizing: 214m CPU, 1701Mi memory per pod (pod_ceiling=140, instance=i8i.8xlarge)
+2026-03-17 10:39:53,928 INFO     k8s_scale_test.preflight:   Workload demand (dynamic sizing): 6420.0 vCPU, 49834.0 GiB memory, 30000 pods
+2026-03-17 10:39:53,928 INFO     k8s_scale_test.preflight:   Subnet IPs: 114135 available, 30000 needed — OK
+2026-03-17 10:39:53,928 INFO     k8s_scale_test.preflight:   vCPU quota: 9267 headroom, ~6520 needed — OK
+2026-03-17 10:39:53,928 INFO     k8s_scale_test.preflight:   NodePool CPU: 9766 limit, 6420 needed — OK
+2026-03-17 10:39:53,928 INFO     k8s_scale_test.preflight:   Pool alt: 242 nodes × 140 usable pods/node (150 maxPods - 10 daemonsets) = 33880 ceiling
+2026-03-17 10:39:53,928 INFO     k8s_scale_test.preflight:   Workloads target pools: alt → relevant ceiling: 33880
+2026-03-17 10:39:53,928 INFO     k8s_scale_test.preflight:   Pod ceiling: 30492 effective (33880 raw × 90%), target 30000 — OK
+2026-03-17 10:39:53,928 INFO     k8s_scale_test.preflight: Preflight: max_achievable=30492, target=30000, decision=go
+
+============================================================
+[OPERATOR] Preflight complete. Approve to proceed with scaling?
+  max_achievable: 30492
+  target: 30000
+============================================================
+2026-03-17 10:39:53,929 INFO     k8s_scale_test.controller: Auto-approving: Preflight complete. Approve to proceed with scaling?
+2026-03-17 10:39:53,929 INFO     k8s_scale_test.controller: CL2 preload: launching concurrently with pod scaling
+2026-03-17 10:39:54,884 INFO     k8s_scale_test.controller: Patching stressor manifests: requests=214m/1701Mi, limits=428m/2551Mi
+2026-03-17 10:39:54,930 INFO     k8s_scale_test.controller: Skipping 5 unlabeled deployments (no scale-test/role): grow, cpu-stress, efs-test-app, iperf3-server1, iperf3-server2
+2026-03-17 10:39:54,946 INFO     k8s_scale_test.flux: Set iperf3-server replicas=600 in apps/base/stress-test/network-stress.yaml
+2026-03-17 10:39:54,946 INFO     k8s_scale_test.controller: Scaling 1 infrastructure deployments to 600 replicas each
+2026-03-17 10:40:00,153 INFO     k8s_scale_test.controller: Committed and pushed: scale-test: deploy iperf3 servers
+2026-03-17 10:41:00,161 INFO     k8s_scale_test.controller: Flux reconcile timed out (will auto-sync): Command '['flux', 'reconcile', 'kustomization', 'app', '--with-source']' timed out after 60 seconds
+2026-03-17 10:41:00,162 INFO     k8s_scale_test.controller: Waiting for infrastructure pods to be ready...
+2026-03-17 10:41:00,165 INFO     k8s_scale_test.controller: CL2 preload: starting with config 'mixed-workload' (local subprocess)
+2026-03-17 10:41:00,166 INFO     k8s_scale_test.controller: CL2 preload plan (proportional to 30000 target pods):
+2026-03-17 10:41:00,166 INFO     k8s_scale_test.controller:   Namespaces:    375
+2026-03-17 10:41:00,166 INFO     k8s_scale_test.controller:   Deployments:   750 (2/ns × 375 ns)
+2026-03-17 10:41:00,166 INFO     k8s_scale_test.controller:   Pods:          0 (0 replicas × 750 deployments)
+2026-03-17 10:41:00,166 INFO     k8s_scale_test.controller:   Services:      750 (2/ns)
+2026-03-17 10:41:00,166 INFO     k8s_scale_test.controller:   ConfigMaps:    29250 (26/ns × 3 sizes)
+2026-03-17 10:41:00,166 INFO     k8s_scale_test.controller:   Secrets:       30000 (80/ns)
+2026-03-17 10:41:00,166 INFO     k8s_scale_test.controller:   Total objects: 61125
+2026-03-17 10:41:00,180 INFO     k8s_scale_test.controller: CL2 command: /Users/shancor/Projects/flux/bin/clusterloader2 --testconfig=/var/folders/rq/w63hkc1x1831pgt_602kdrrw0000gr/T/cl2-results-vw3v6d1s/config.yaml --kubeconfig=/Users/shancor/.kube/config --report-dir=/var/folders/rq/w63hkc1x1831pgt_602kdrrw0000gr/T/cl2-results-vw3v6d1s --provider=eks --enable-exec-service=false --delete-automanaged-namespaces=false --v=2 --testoverrides=/var/folders/rq/w63hkc1x1831pgt_602kdrrw0000gr/T/cl2-results-vw3v6d1s/overrides.yaml
+2026-03-17 10:41:15,187 INFO     k8s_scale_test.controller:   CL2 objects: ns=231 dep=0 svc=0 cm=231 sec=0 total=462
+2026-03-17 10:41:30,188 INFO     k8s_scale_test.controller:   CL2 objects: ns=375 dep=750 svc=226 cm=375 sec=0 total=1726
+2026-03-17 10:41:45,189 INFO     k8s_scale_test.controller:   CL2 objects: ns=375 dep=750 svc=750 cm=1353 sec=0 total=3228
+2026-03-17 10:42:00,190 INFO     k8s_scale_test.controller:   CL2 objects: ns=375 dep=750 svc=750 cm=2853 sec=0 total=4728
+2026-03-17 10:42:15,191 INFO     k8s_scale_test.controller:   CL2 objects: ns=375 dep=750 svc=750 cm=4353 sec=0 total=6228
+2026-03-17 10:42:30,192 INFO     k8s_scale_test.controller:   CL2 objects: ns=375 dep=750 svc=750 cm=5854 sec=0 total=7729
+2026-03-17 10:42:45,194 INFO     k8s_scale_test.controller:   CL2 objects: ns=375 dep=750 svc=750 cm=7353 sec=0 total=9228
+2026-03-17 10:43:00,194 INFO     k8s_scale_test.controller:   CL2 objects: ns=375 dep=750 svc=750 cm=8853 sec=0 total=10728
+2026-03-17 10:43:15,195 INFO     k8s_scale_test.controller:   CL2 objects: ns=375 dep=750 svc=750 cm=10320 sec=0 total=12195
+2026-03-17 10:43:30,197 INFO     k8s_scale_test.controller:   CL2 objects: ns=375 dep=750 svc=750 cm=10816 sec=0 total=12691
+2026-03-17 10:43:45,198 INFO     k8s_scale_test.controller:   CL2 objects: ns=375 dep=750 svc=750 cm=11213 sec=0 total=13088
+2026-03-17 10:44:00,199 INFO     k8s_scale_test.controller:   CL2 objects: ns=375 dep=750 svc=750 cm=11213 sec=0 total=13088
+2026-03-17 10:44:15,200 INFO     k8s_scale_test.controller:   CL2 objects: ns=375 dep=750 svc=750 cm=13510 sec=0 total=15385
+2026-03-17 10:44:30,201 INFO     k8s_scale_test.controller:   CL2 objects: ns=375 dep=750 svc=750 cm=13729 sec=0 total=15604
+2026-03-17 10:44:45,203 INFO     k8s_scale_test.controller:   CL2 objects: ns=375 dep=750 svc=750 cm=13729 sec=0 total=15604
+2026-03-17 10:45:00,204 INFO     k8s_scale_test.controller:   CL2 objects: ns=375 dep=750 svc=750 cm=13729 sec=0 total=15604
+2026-03-17 10:45:15,206 INFO     k8s_scale_test.controller:   CL2 objects: ns=375 dep=750 svc=750 cm=13729 sec=0 total=15604
+2026-03-17 10:45:30,207 INFO     k8s_scale_test.controller:   CL2 objects: ns=375 dep=750 svc=750 cm=17292 sec=0 total=19167
+2026-03-17 10:45:45,208 INFO     k8s_scale_test.controller:   CL2 objects: ns=375 dep=750 svc=750 cm=17292 sec=0 total=19167
+2026-03-17 10:45:59,678 INFO     k8s_scale_test.controller: Infrastructure pods ready, proceeding with stressor scaling
+2026-03-17 10:45:59,683 INFO     k8s_scale_test.controller: Even distribution of 30000 pods across 5 stressors
+2026-03-17 10:46:00,211 INFO     k8s_scale_test.controller:   CL2 objects: ns=375 dep=750 svc=750 cm=17292 sec=0 total=19167
+2026-03-17 10:46:05,938 INFO     k8s_scale_test.controller:   Cleared events in stress-test
+2026-03-17 10:46:11,736 INFO     k8s_scale_test.controller: Observer started: kubectl watch in 'stress-test' → scale-test-results/2026-03-17_17-39-50/observer.log
+2026-03-17 10:46:11,750 INFO     k8s_scale_test.flux: Set cpu-stress-test replicas=6000 in apps/base/stress-test/cpu-stress.yaml
+2026-03-17 10:46:11,760 INFO     k8s_scale_test.flux: Set memory-stress-test replicas=6000 in apps/base/stress-test/memory-stress.yaml
+2026-03-17 10:46:11,769 INFO     k8s_scale_test.flux: Set io-stress-test replicas=6000 in apps/base/stress-test/io-stress.yaml
+2026-03-17 10:46:11,784 INFO     k8s_scale_test.flux: Set iperf3-client replicas=6000 in apps/base/stress-test/network-stress.yaml
+2026-03-17 10:46:11,793 INFO     k8s_scale_test.flux: Set sysctl-connection-test replicas=6000 in apps/base/stress-test/sysctl-stress.yaml
+2026-03-17 10:46:24,326 INFO     k8s_scale_test.controller: Committed and pushed: scale-test: 30000 pods
+2026-03-17 10:47:16,307 INFO     k8s_scale_test.monitor: Monitor: K8s token refreshed
+2026-03-17 10:47:16,308 DEBUG    k8s_scale_test.monitor: Node watch reconnect: AttributeError
+2026-03-17 10:47:24,337 INFO     k8s_scale_test.controller: Flux reconcile timed out (will auto-sync): Command '['flux', 'reconcile', 'kustomization', 'app', '--with-source']' timed out after 60 seconds
+2026-03-17 10:47:24,338 INFO     k8s_scale_test.controller:   CL2 objects: ns=375 dep=750 svc=750 cm=25737 sec=2956 total=30568
+2026-03-17 10:47:39,340 INFO     k8s_scale_test.controller:   CL2 objects: ns=375 dep=750 svc=750 cm=28333 sec=4469 total=34677
+2026-03-17 10:47:54,342 INFO     k8s_scale_test.controller:   CL2 objects: ns=375 dep=750 svc=750 cm=29625 sec=5979 total=37479
+2026-03-17 10:47:54,343 INFO     k8s_scale_test.controller:   Scaling: ready=1025 pending=5576 total=6601 (0.5m)
+2026-03-17 10:47:59,348 INFO     k8s_scale_test.anomaly: Investigating: Ready rate 0.20/s dropped below threshold (rolling avg 14.20/s)
+2026-03-17 10:47:59,803 INFO     k8s_scale_test.anomaly:   Events: InvalidDiskCapacity=41, InsufficientCapacityError=30, TerminationGracePeriodExpiring=30
+2026-03-17 10:47:59,992 INFO     k8s_scale_test.anomaly:   Pod phases: 
+2026-03-17 10:48:09,345 INFO     k8s_scale_test.controller:   CL2 objects: ns=375 dep=750 svc=750 cm=29625 sec=7479 total=38979
+2026-03-17 10:48:21,675 INFO     k8s_scale_test.monitor: Monitor: K8s token refreshed
+2026-03-17 10:48:21,675 DEBUG    k8s_scale_test.monitor: Node watch reconnect: AttributeError
+2026-03-17 10:48:24,347 INFO     k8s_scale_test.controller:   CL2 objects: ns=375 dep=750 svc=750 cm=29625 sec=8979 total=40479
+2026-03-17 10:48:24,353 INFO     k8s_scale_test.controller:   Scaling: ready=1517 pending=18084 total=19601 (1.0m)
+2026-03-17 10:48:24,353 INFO     k8s_scale_test.controller: Running diagnostics — 18084 pods pending after 60s
+2026-03-17 10:48:24,357 INFO     k8s_scale_test.anomaly: Investigating: Diagnostics: 18084 pods pending
+2026-03-17 10:48:30,695 INFO     k8s_scale_test.anomaly:   Events: FailedScheduling=5864, FailedCreatePodSandBox=210, FailedCreate=6
+2026-03-17 10:48:31,340 INFO     k8s_scale_test.anomaly:   Pod phases: Pending=20453, Running=1648
+2026-03-17 10:48:34,885 INFO     k8s_scale_test.anomaly:   Investigating 20 nodes (20 stuck-pod, 0 bad-condition)
+2026-03-17 10:48:39,348 INFO     k8s_scale_test.controller:   CL2 objects: ns=375 dep=750 svc=750 cm=29625 sec=10480 total=41980
+2026-03-17 10:48:44,623 INFO     k8s_scale_test.diagnostics:   SSM collected 8 results from ip-100-64-23-184.us-west-2.compute.inter
+2026-03-17 10:48:52,529 INFO     k8s_scale_test.diagnostics:   SSM collected 8 results from ip-100-64-227-63.us-west-2.compute.inter
+2026-03-17 10:48:54,354 INFO     k8s_scale_test.controller:   CL2 objects: ns=375 dep=750 svc=750 cm=29625 sec=11979 total=43479
+2026-03-17 10:48:54,895 INFO     k8s_scale_test.controller:   Scaling: ready=2222 pending=28378 total=30600 (1.5m)
+2026-03-17 10:49:05,897 INFO     k8s_scale_test.diagnostics:   SSM collected 8 results from ip-100-64-134-27.us-west-2.compute.inter
+2026-03-17 10:49:05,918 WARNING  k8s_scale_test.controller:   Warning events: FailedScheduling=5, FailedCreatePodSandBox=5, FailedCreate=5
+2026-03-17 10:49:09,355 INFO     k8s_scale_test.controller:   CL2 objects: ns=375 dep=750 svc=750 cm=29625 sec=13480 total=44980
+2026-03-17 10:49:24,356 INFO     k8s_scale_test.controller:   CL2 objects: ns=375 dep=750 svc=750 cm=29625 sec=14979 total=46479
+2026-03-17 10:49:24,908 INFO     k8s_scale_test.monitor: Monitor: K8s token refreshed
+2026-03-17 10:49:24,909 DEBUG    k8s_scale_test.monitor: Node watch reconnect: AttributeError
+2026-03-17 10:49:24,911 INFO     k8s_scale_test.controller:   Scaling: ready=2917 pending=27683 total=30600 (2.0m)
+2026-03-17 10:49:39,359 INFO     k8s_scale_test.controller:   CL2 objects: ns=375 dep=750 svc=750 cm=29625 sec=16481 total=47981
+2026-03-17 10:49:54,362 INFO     k8s_scale_test.controller:   CL2 objects: ns=375 dep=750 svc=750 cm=29625 sec=17980 total=49480
+2026-03-17 10:49:54,921 INFO     k8s_scale_test.controller:   Scaling: ready=5139 pending=25461 total=30600 (2.5m)
+2026-03-17 10:50:09,366 INFO     k8s_scale_test.controller:   CL2 objects: ns=375 dep=750 svc=750 cm=29625 sec=19481 total=50981
+2026-03-17 10:50:24,370 INFO     k8s_scale_test.controller:   CL2 objects: ns=375 dep=750 svc=750 cm=29625 sec=20981 total=52481
+2026-03-17 10:50:24,933 INFO     k8s_scale_test.controller:   Scaling: ready=7509 pending=23091 total=30600 (3.0m)
+2026-03-17 10:50:29,840 INFO     k8s_scale_test.monitor: Monitor: K8s token refreshed
+2026-03-17 10:50:29,840 DEBUG    k8s_scale_test.monitor: Node watch reconnect: AttributeError
+2026-03-17 10:50:39,372 INFO     k8s_scale_test.controller:   CL2 objects: ns=375 dep=750 svc=750 cm=29625 sec=22481 total=53981
+2026-03-17 10:50:54,375 INFO     k8s_scale_test.controller:   CL2 objects: ns=375 dep=750 svc=750 cm=29625 sec=23982 total=55482
+2026-03-17 10:50:54,948 INFO     k8s_scale_test.controller:   Scaling: ready=9805 pending=20795 total=30600 (3.5m)
+2026-03-17 10:51:09,376 INFO     k8s_scale_test.controller:   CL2 objects: ns=375 dep=750 svc=750 cm=29625 sec=24927 total=56427
+2026-03-17 10:51:24,388 INFO     k8s_scale_test.controller:   CL2 objects: ns=375 dep=750 svc=750 cm=29625 sec=24927 total=56427
+2026-03-17 10:51:24,977 INFO     k8s_scale_test.controller:   Scaling: ready=11972 pending=18628 total=30600 (4.0m)
+2026-03-17 10:51:36,130 INFO     k8s_scale_test.monitor: Monitor: K8s token refreshed
+2026-03-17 10:51:36,131 DEBUG    k8s_scale_test.monitor: Node watch reconnect: AttributeError
+2026-03-17 10:51:39,538 INFO     k8s_scale_test.controller:   CL2 objects: ns=375 dep=750 svc=750 cm=29625 sec=24927 total=56427
+2026-03-17 10:51:54,540 INFO     k8s_scale_test.controller:   CL2 objects: ns=375 dep=750 svc=750 cm=29625 sec=26839 total=58339
+2026-03-17 10:51:54,593 INFO     k8s_scale_test.controller:   CL2: JUnit report was created: /var/folders/rq/w63hkc1x1831pgt_602kdrrw0000gr/T/cl2-results-vw3v6d1s/junit.xml
+2026-03-17 10:51:54,594 DEBUG    k8s_scale_test.controller:   CL2 stderr: I0317 10:51:54.561919    4579 simple_test_executor.go:183] Step "[step: 06] Create secrets" ended
+2026-03-17 10:51:54,594 DEBUG    k8s_scale_test.controller:   CL2 stderr: I0317 10:51:54.562225    4579 simple_test_executor.go:411] Resources cleanup time: 292ns
+2026-03-17 10:51:54,594 DEBUG    k8s_scale_test.controller:   CL2 stderr: I0317 10:51:54.562233    4579 simple_test_executor.go:414] Tearing down dependencies
+2026-03-17 10:51:54,594 DEBUG    k8s_scale_test.controller:   CL2 stderr: I0317 10:51:54.562236    4579 simple_test_executor.go:418] All dependencies torn down successfully, cleanup time: 3.417µs
+2026-03-17 10:51:54,594 DEBUG    k8s_scale_test.controller:   CL2 stderr: I0317 10:51:54.562241    4579 clusterloader.go:264] --------------------------------------------------------------------------------
+2026-03-17 10:51:54,594 DEBUG    k8s_scale_test.controller:   CL2 stderr: I0317 10:51:54.562243    4579 clusterloader.go:265] Test Finished
+2026-03-17 10:51:54,594 DEBUG    k8s_scale_test.controller:   CL2 stderr: I0317 10:51:54.562245    4579 clusterloader.go:266]   Test: /var/folders/rq/w63hkc1x1831pgt_602kdrrw0000gr/T/cl2-results-vw3v6d1s/config.yaml
+2026-03-17 10:51:54,595 DEBUG    k8s_scale_test.controller:   CL2 stderr: I0317 10:51:54.562246    4579 clusterloader.go:267]   Status: Success
+2026-03-17 10:51:54,595 DEBUG    k8s_scale_test.controller:   CL2 stderr: I0317 10:51:54.562248    4579 clusterloader.go:271] --------------------------------------------------------------------------------
+2026-03-17 10:51:54,595 DEBUG    k8s_scale_test.controller:   CL2 stderr: I0317 10:51:54.563429    4579 prometheus.go:338] Get snapshot from Prometheus
+2026-03-17 10:51:54,595 INFO     k8s_scale_test.controller: CL2 peak objects: ns=375 dep=750 svc=750 cm=29625 sec=26839 total=58339
+2026-03-17 10:51:54,599 DEBUG    k8s_scale_test.controller: CL2 result parsing skipped (no PerfData): No PerfData JSON found in /var/folders/rq/w63hkc1x1831pgt_602kdrrw0000gr/T/cl2-results-vw3v6d1s
+2026-03-17 10:51:54,600 INFO     k8s_scale_test.controller: CL2 preload complete: Failed (654s, 61125 objects created)
+2026-03-17 10:51:55,069 INFO     k8s_scale_test.controller:   Scaling: ready=14812 pending=15788 total=30600 (4.5m)
+2026-03-17 10:52:13,917 INFO     k8s_scale_test.monitor: Monitor: K8s token refreshed
+2026-03-17 10:52:13,917 DEBUG    k8s_scale_test.monitor: Deploy watch reconnect stress-test: AttributeError
+2026-03-17 10:52:25,095 INFO     k8s_scale_test.controller:   Scaling: ready=17602 pending=12998 total=30600 (5.0m)
+2026-03-17 11:06:48,315 DEBUG    k8s_scale_test.monitor: Node watch reconnect: ProtocolError
+2026-03-17 11:06:48,315 DEBUG    k8s_scale_test.events: Event watch reconnecting for stress-test: ProtocolError
+2026-03-17 11:06:48,323 DEBUG    k8s_scale_test.monitor: Deploy watch reconnect stress-test: ProtocolError
+2026-03-17 11:06:51,951 INFO     k8s_scale_test.controller: K8s token refreshed
+2026-03-17 11:06:51,951 INFO     k8s_scale_test.controller:   Scaling: ready=18620 pending=11980 total=30600 (19.3m)
+2026-03-17 11:06:51,951 WARNING  k8s_scale_test.controller: Timeout: ready=18620 pending=11980 after 19.3m
+2026-03-17 11:06:51,954 INFO     k8s_scale_test.anomaly: Investigating: Timeout: 11980 pods pending after 1161s
+2026-03-17 11:06:52,307 INFO     k8s_scale_test.anomaly:   Events: TerminationGracePeriodExpiring=14, FailedDraining=6, InsufficientCapacityError=2, DeletingNodeFailed=1
+2026-03-17 11:06:52,545 INFO     k8s_scale_test.anomaly:   Pod phases: 
+2026-03-17 11:06:53,215 DEBUG    k8s_scale_test.events: Event watch stress-test: resource_version expired, re-listing
+2026-03-17 11:06:57,838 INFO     k8s_scale_test.anomaly:   Investigating 4 nodes (0 stuck-pod, 4 bad-condition)
+2026-03-17 11:06:58,728 ERROR    k8s_scale_test.diagnostics: SSM send failed [kubelet_logs] on i-01f14b04b86075199: An error occurred (InvalidInstanceId) when calling the SendCommand operation: Instances not in a valid state for account
+2026-03-17 11:06:58,800 ERROR    k8s_scale_test.diagnostics: SSM send failed [containerd_logs] on i-01f14b04b86075199: An error occurred (InvalidInstanceId) when calling the SendCommand operation: Instances not in a valid state for account
+2026-03-17 11:06:58,904 ERROR    k8s_scale_test.diagnostics: SSM send failed [journal_kubelet] on i-01f14b04b86075199: An error occurred (InvalidInstanceId) when calling the SendCommand operation: Instances not in a valid state for account
+2026-03-17 11:06:58,990 ERROR    k8s_scale_test.diagnostics: SSM send failed [journal_containerd] on i-01f14b04b86075199: An error occurred (InvalidInstanceId) when calling the SendCommand operation: Instances not in a valid state for account
+2026-03-17 11:06:59,074 ERROR    k8s_scale_test.diagnostics: SSM send failed [resource_utilization] on i-01f14b04b86075199: An error occurred (InvalidInstanceId) when calling the SendCommand operation: Instances not in a valid state for account
+2026-03-17 11:06:59,159 ERROR    k8s_scale_test.diagnostics: SSM send failed [ipamd_log] on i-01f14b04b86075199: An error occurred (InvalidInstanceId) when calling the SendCommand operation: Instances not in a valid state for account
+2026-03-17 11:06:59,245 ERROR    k8s_scale_test.diagnostics: SSM send failed [cni_config] on i-01f14b04b86075199: An error occurred (InvalidInstanceId) when calling the SendCommand operation: Instances not in a valid state for account
+2026-03-17 11:07:00,257 INFO     k8s_scale_test.diagnostics:   SSM collected 7 results from ip-192-168-246-141.us-west-2.compute.int
+2026-03-17 11:07:00,329 ERROR    k8s_scale_test.diagnostics: SSM send failed [kubelet_logs] on i-09162175aadccfde7: An error occurred (InvalidInstanceId) when calling the SendCommand operation: Instances not in a valid state for account
+2026-03-17 11:07:00,410 ERROR    k8s_scale_test.diagnostics: SSM send failed [containerd_logs] on i-09162175aadccfde7: An error occurred (InvalidInstanceId) when calling the SendCommand operation: Instances not in a valid state for account
+2026-03-17 11:07:00,468 ERROR    k8s_scale_test.diagnostics: SSM send failed [journal_kubelet] on i-09162175aadccfde7: An error occurred (InvalidInstanceId) when calling the SendCommand operation: Instances not in a valid state for account
+2026-03-17 11:07:00,545 ERROR    k8s_scale_test.diagnostics: SSM send failed [journal_containerd] on i-09162175aadccfde7: An error occurred (InvalidInstanceId) when calling the SendCommand operation: Instances not in a valid state for account
+2026-03-17 11:07:00,632 ERROR    k8s_scale_test.diagnostics: SSM send failed [resource_utilization] on i-09162175aadccfde7: An error occurred (InvalidInstanceId) when calling the SendCommand operation: Instances not in a valid state for account
+2026-03-17 11:07:00,709 ERROR    k8s_scale_test.diagnostics: SSM send failed [ipamd_log] on i-09162175aadccfde7: An error occurred (InvalidInstanceId) when calling the SendCommand operation: Instances not in a valid state for account
+2026-03-17 11:07:00,763 ERROR    k8s_scale_test.diagnostics: SSM send failed [cni_config] on i-09162175aadccfde7: An error occurred (InvalidInstanceId) when calling the SendCommand operation: Instances not in a valid state for account
+2026-03-17 11:07:01,766 INFO     k8s_scale_test.diagnostics:   SSM collected 7 results from ip-192-168-222-12.us-west-2.compute.inte
+2026-03-17 11:07:01,823 ERROR    k8s_scale_test.diagnostics: SSM send failed [kubelet_logs] on i-0aec352a2760779e3: An error occurred (InvalidInstanceId) when calling the SendCommand operation: Instances not in a valid state for account
+2026-03-17 11:07:01,903 ERROR    k8s_scale_test.diagnostics: SSM send failed [containerd_logs] on i-0aec352a2760779e3: An error occurred (InvalidInstanceId) when calling the SendCommand operation: Instances not in a valid state for account
+2026-03-17 11:07:01,986 ERROR    k8s_scale_test.diagnostics: SSM send failed [journal_kubelet] on i-0aec352a2760779e3: An error occurred (InvalidInstanceId) when calling the SendCommand operation: Instances not in a valid state for account
+2026-03-17 11:07:02,047 ERROR    k8s_scale_test.diagnostics: SSM send failed [journal_containerd] on i-0aec352a2760779e3: An error occurred (InvalidInstanceId) when calling the SendCommand operation: Instances not in a valid state for account
+2026-03-17 11:07:02,114 ERROR    k8s_scale_test.diagnostics: SSM send failed [resource_utilization] on i-0aec352a2760779e3: An error occurred (InvalidInstanceId) when calling the SendCommand operation: Instances not in a valid state for account
+2026-03-17 11:07:02,209 ERROR    k8s_scale_test.diagnostics: SSM send failed [ipamd_log] on i-0aec352a2760779e3: An error occurred (InvalidInstanceId) when calling the SendCommand operation: Instances not in a valid state for account
+2026-03-17 11:07:02,301 ERROR    k8s_scale_test.diagnostics: SSM send failed [cni_config] on i-0aec352a2760779e3: An error occurred (InvalidInstanceId) when calling the SendCommand operation: Instances not in a valid state for account
+2026-03-17 11:07:03,305 INFO     k8s_scale_test.diagnostics:   SSM collected 7 results from ip-192-168-210-157.us-west-2.compute.int
+
+============================================================
+[OPERATOR] Critical finding at timeout
+  finding: finding-773fc2be
+============================================================
+2026-03-17 11:07:03,331 INFO     k8s_scale_test.controller: Auto-approving: Critical finding at timeout
+2026-03-17 11:07:03,331 INFO     k8s_scale_test.controller: Scaling complete: ready=30600/30000 in 19.6m
+2026-03-17 11:07:03,331 INFO     k8s_scale_test.controller: Waiting for monitor to confirm 30000 pods ready before hold...
+2026-03-17 11:07:03,340 INFO     k8s_scale_test.controller: Holding at peak for 120s + running health checks...
+2026-03-17 11:07:03,342 INFO     k8s_scale_test.health_sweep: Node health sweep starting...
+2026-03-17 11:07:04,245 WARNING  k8s_scale_test.health_sweep: PromQL query failed for disk: HTTP Error 403: Forbidden
+2026-03-17 11:07:04,247 WARNING  k8s_scale_test.health_sweep: PromQL query failed for network_errors: HTTP Error 403: Forbidden
+2026-03-17 11:07:04,251 WARNING  k8s_scale_test.health_sweep: PromQL query failed for memory: HTTP Error 403: Forbidden
+2026-03-17 11:07:04,252 WARNING  k8s_scale_test.health_sweep: PromQL query failed for pod_restarts: HTTP Error 403: Forbidden
+2026-03-17 11:07:04,262 WARNING  k8s_scale_test.health_sweep: PromQL query failed for cpu: HTTP Error 403: Forbidden
+2026-03-17 11:07:07,359 INFO     k8s_scale_test.health_sweep: Node health sweep (AMP): 3 nodes, 0 healthy, 4 issues
+2026-03-17 11:07:07,360 INFO     k8s_scale_test.health_sweep: Health sweep data saved to scale-test-results/2026-03-17_17-39-50/diagnostics/health_sweep.json
+2026-03-17 11:07:56,650 INFO     k8s_scale_test.monitor: Monitor: K8s token refreshed
+2026-03-17 11:07:56,652 DEBUG    k8s_scale_test.monitor: Deploy watch reconnect stress-test: AttributeError
+2026-03-17 11:07:56,652 DEBUG    k8s_scale_test.monitor: Node watch reconnect: AttributeError
