@@ -266,7 +266,11 @@ class PodRateMonitor:
                     for cb in self._alert_callbacks: asyncio.create_task(self._safe_callback(cb, a))
 
                 mr = max(100, self.config.target_pods * 0.01)
-                if not first and not is_gap and not is_hold and pending > 0 and ready > mr and not self._alert_in_flight and self._check_threshold(rate, ra):
+                # Suppress rate drop alerts when we're near the target — the rate
+                # naturally drops to zero as the last few pods come online. Alerting
+                # on this wastes anomaly detector cycles investigating a non-issue.
+                near_target = self.config.target_pods > 0 and ready >= self.config.target_pods * 0.95
+                if not first and not is_gap and not is_hold and not near_target and pending > 0 and ready > mr and not self._alert_in_flight and self._check_threshold(rate, ra):
                     self._alert_in_flight = True
                     a = Alert(alert_type=AlertType.RATE_DROP, timestamp=now,
                         message=f"Ready rate {rate:.2f}/s dropped below threshold (rolling avg {ra:.2f}/s)",
