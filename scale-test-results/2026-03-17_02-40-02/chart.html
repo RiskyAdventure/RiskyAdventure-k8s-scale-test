@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8">
+<title>Scale Test — 2026-03-17_02-40-02</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+<style>
+body { font-family: -apple-system, sans-serif; margin: 20px; background: #1a1a2e; color: #eee; }
+.chart-box { background: #16213e; border-radius: 8px; padding: 20px; margin-bottom: 20px; }
+h1 { color: #e94560; margin-bottom: 4px; }
+.run-id { color: #888; font-size: 13px; margin-bottom: 16px; }
+.stats { display: flex; gap: 16px; margin-bottom: 20px; flex-wrap: wrap; }
+.stat { background: #0f3460; padding: 12px 20px; border-radius: 8px; }
+.stat .val { font-size: 24px; font-weight: bold; color: #e94560; }
+.stat .lbl { font-size: 11px; color: #aaa; }
+table { border-collapse: collapse; width: 100%; margin-bottom: 20px; }
+th, td { padding: 8px 14px; text-align: right; border-bottom: 1px solid #2a2a4a; }
+th { color: #aaa; font-size: 12px; text-transform: uppercase; }
+td { color: #ddd; font-size: 14px; }
+td:first-child, th:first-child { text-align: left; }
+.result { font-size: 18px; font-weight: bold; padding: 4px 12px; border-radius: 4px; display: inline-block; margin-bottom: 12px; }
+.result.pass { background: #1b4332; color: #4ecca3; }
+.result.fail { background: #4a1525; color: #e94560; }
+.note { color: #666; font-size: 11px; margin-top: 4px; }
+.data-table { max-height: 400px; overflow-y: auto; }
+.data-table table { font-size: 12px; }
+.data-table td, .data-table th { padding: 4px 10px; white-space: nowrap; }
+</style></head><body>
+<h1>Scale Test Results</h1>
+<div class="run-id">2026-03-17_02-40-02</div>
+<div class="result pass">PASSED — success</div>
+
+<div class="chart-box">
+<table>
+<tr><th style="text-align:left">Metric</th><th>Value</th></tr>
+<tr><td style="color:#aaa">Target</td><td>10,000 pods</td></tr>
+<tr><td style="color:#aaa">Reached</td><td>10,200 pods</td></tr>
+<tr><td style="color:#aaa">Scaling Duration</td><td>20.1m (1206s)</td></tr>
+<tr><td style="color:#aaa">Avg Rate</td><td>8.3 pods/s</td></tr>
+<tr><td style="color:#aaa">Peak Rate (clean)</td><td>944.0 pods/s</td></tr>
+<tr><td style="color:#aaa">Nodes</td><td>186</td></tr>
+<tr><td style="color:#aaa">Anomalies</td><td>2</td></tr>
+<tr><td style="color:#aaa">Data Points</td><td>70 (2 gaps)</td></tr>
+</table>
+</div>
+
+
+
+<div class="chart-box">
+<h2 style="color:#e94560;margin-top:0">CL2 Preload</h2>
+<table>
+<tr><td style="color:#aaa">Config</td><td colspan="2">mixed-workload</td></tr>
+<tr><td style="color:#aaa">Status</td><td colspan="2">Completed (no metrics)</td></tr>
+<tr><td style="color:#aaa">Duration</td><td colspan="2">232s</td></tr>
+<tr><td colspan='3' style='color:#aaa;padding-top:8px;font-weight:bold'>Creation Rates</td></tr>
+<tr><td style='color:#aaa'>Deployments</td><td colspan='2'>1/s (250 in 232s)</td></tr>
+<tr><td style='color:#aaa'>Services</td><td colspan='2'>1/s (250 in 232s)</td></tr>
+<tr><td style='color:#aaa'>ConfigMaps</td><td colspan='2'>42/s (9,875 in 232s)</td></tr>
+<tr><td style='color:#aaa'>Secrets</td><td colspan='2'>43/s (10,000 in 232s)</td></tr>
+
+
+<tr><th style="text-align:left;color:#aaa">Object Type</th><th style="color:#aaa">Planned</th><th style="color:#aaa">Actual</th></tr>
+<tr><td style="color:#aaa">Namespaces</td><td>125</td><td style="color:#4ecca3">125</td></tr>
+
+<tr><td style="color:#aaa">Deployments</td><td>250</td><td style="color:#4ecca3">250</td></tr>
+
+
+<tr><td style="color:#aaa">Services</td><td>250</td><td style="color:#4ecca3">250</td></tr>
+
+<tr><td style="color:#aaa">ConfigMaps</td><td>9,750</td><td style="color:#4ecca3">9,875</td></tr>
+
+<tr><td style="color:#aaa">Secrets</td><td>10,000</td><td style="color:#4ecca3">10,000</td></tr>
+
+<tr style="border-top:2px solid #2a2a4a"><td style="color:#aaa;font-weight:bold">Total</td><td style="font-weight:bold">20,375</td><td style="font-weight:bold;color:#4ecca3">20,500</td></tr>
+</table>
+</div>
+
+
+<div class="chart-box data-table">
+<table>
+<tr><th>Elapsed</th><th>Time</th><th>Ready</th><th>Pending</th><th>Total</th><th>Rate/s</th><th>Interval</th><th>Gap</th></tr>
+<tr><td>0s</td><td>02:45:41</td><td>200</td><td>0</td><td>200</td><td>0.0</td><td>0.0s</td><td></td></tr>
+<tr><td>5s</td><td>02:45:46</td><td>200</td><td>0</td><td>200</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>10s</td><td>02:45:51</td><td>200</td><td>2,500</td><td>2,700</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>15s</td><td>02:45:56</td><td>200</td><td>5,000</td><td>5,200</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>20s</td><td>02:46:01</td><td>200</td><td>10,000</td><td>10,200</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>25s</td><td>02:46:06</td><td>200</td><td>10,000</td><td>10,200</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>30s</td><td>02:46:11</td><td>210</td><td>9,990</td><td>10,200</td><td>2.0</td><td>5.0s</td><td></td></tr>
+<tr><td>35s</td><td>02:46:16</td><td>218</td><td>9,982</td><td>10,200</td><td>1.6</td><td>5.0s</td><td></td></tr>
+<tr><td>40s</td><td>02:46:22</td><td>258</td><td>9,942</td><td>10,200</td><td>8.0</td><td>5.0s</td><td></td></tr>
+<tr><td>45s</td><td>02:46:27</td><td>281</td><td>9,919</td><td>10,200</td><td>4.6</td><td>5.0s</td><td></td></tr>
+<tr><td>50s</td><td>02:46:32</td><td>320</td><td>9,880</td><td>10,200</td><td>7.8</td><td>5.0s</td><td></td></tr>
+<tr><td>55s</td><td>02:46:37</td><td>340</td><td>9,860</td><td>10,200</td><td>4.0</td><td>5.0s</td><td></td></tr>
+<tr><td>60s</td><td>02:46:42</td><td>347</td><td>9,853</td><td>10,200</td><td>1.4</td><td>5.0s</td><td></td></tr>
+<tr><td>65s</td><td>02:46:47</td><td>359</td><td>9,841</td><td>10,200</td><td>2.4</td><td>5.0s</td><td></td></tr>
+<tr><td>70s</td><td>02:46:52</td><td>423</td><td>9,777</td><td>10,200</td><td>12.7</td><td>5.0s</td><td></td></tr>
+<tr><td>85s</td><td>02:47:07</td><td>682</td><td>9,518</td><td>10,200</td><td>16.9</td><td>15.4s</td><td>⚠</td></tr>
+<tr><td>90s</td><td>02:47:12</td><td>782</td><td>9,418</td><td>10,200</td><td>20.0</td><td>5.0s</td><td></td></tr>
+<tr><td>95s</td><td>02:47:17</td><td>967</td><td>9,233</td><td>10,200</td><td>37.0</td><td>5.0s</td><td></td></tr>
+<tr><td>100s</td><td>02:47:22</td><td>1,108</td><td>9,092</td><td>10,200</td><td>28.2</td><td>5.0s</td><td></td></tr>
+<tr><td>105s</td><td>02:47:27</td><td>1,200</td><td>9,000</td><td>10,200</td><td>18.4</td><td>5.0s</td><td></td></tr>
+<tr><td>110s</td><td>02:47:32</td><td>1,316</td><td>8,884</td><td>10,200</td><td>23.2</td><td>5.0s</td><td></td></tr>
+<tr><td>115s</td><td>02:47:37</td><td>1,498</td><td>8,702</td><td>10,200</td><td>36.4</td><td>5.0s</td><td></td></tr>
+<tr><td>120s</td><td>02:47:42</td><td>1,683</td><td>8,517</td><td>10,200</td><td>37.0</td><td>5.0s</td><td></td></tr>
+<tr><td>125s</td><td>02:47:47</td><td>1,838</td><td>8,362</td><td>10,200</td><td>31.0</td><td>5.0s</td><td></td></tr>
+<tr><td>130s</td><td>02:47:52</td><td>1,986</td><td>8,214</td><td>10,200</td><td>29.6</td><td>5.0s</td><td></td></tr>
+<tr><td>135s</td><td>02:47:57</td><td>2,136</td><td>8,064</td><td>10,200</td><td>30.0</td><td>5.0s</td><td></td></tr>
+<tr><td>140s</td><td>02:48:02</td><td>2,376</td><td>7,824</td><td>10,200</td><td>48.0</td><td>5.0s</td><td></td></tr>
+<tr><td>145s</td><td>02:48:07</td><td>2,549</td><td>7,651</td><td>10,200</td><td>34.6</td><td>5.0s</td><td></td></tr>
+<tr><td>150s</td><td>02:48:12</td><td>2,742</td><td>7,458</td><td>10,200</td><td>38.6</td><td>5.0s</td><td></td></tr>
+<tr><td>155s</td><td>02:48:17</td><td>2,936</td><td>7,264</td><td>10,200</td><td>38.8</td><td>5.0s</td><td></td></tr>
+<tr><td>160s</td><td>02:48:22</td><td>3,122</td><td>7,078</td><td>10,200</td><td>37.2</td><td>5.0s</td><td></td></tr>
+<tr><td>165s</td><td>02:48:27</td><td>3,291</td><td>6,909</td><td>10,200</td><td>33.8</td><td>5.0s</td><td></td></tr>
+<tr><td>170s</td><td>02:48:32</td><td>3,424</td><td>6,776</td><td>10,200</td><td>26.6</td><td>5.0s</td><td></td></tr>
+<tr><td>175s</td><td>02:48:37</td><td>3,549</td><td>6,651</td><td>10,200</td><td>25.0</td><td>5.0s</td><td></td></tr>
+<tr><td>180s</td><td>02:48:42</td><td>3,628</td><td>6,572</td><td>10,200</td><td>15.8</td><td>5.0s</td><td></td></tr>
+<tr><td>185s</td><td>02:48:47</td><td>3,801</td><td>6,399</td><td>10,200</td><td>34.6</td><td>5.0s</td><td></td></tr>
+<tr><td>190s</td><td>02:48:52</td><td>3,904</td><td>6,296</td><td>10,200</td><td>20.6</td><td>5.0s</td><td></td></tr>
+<tr><td>195s</td><td>02:48:57</td><td>4,121</td><td>6,079</td><td>10,200</td><td>43.4</td><td>5.0s</td><td></td></tr>
+<tr><td>201s</td><td>02:49:02</td><td>4,337</td><td>5,863</td><td>10,200</td><td>43.2</td><td>5.0s</td><td></td></tr>
+<tr><td>206s</td><td>02:49:07</td><td>4,445</td><td>5,755</td><td>10,200</td><td>21.6</td><td>5.0s</td><td></td></tr>
+<tr><td>211s</td><td>02:49:12</td><td>4,496</td><td>5,704</td><td>10,200</td><td>10.1</td><td>5.1s</td><td></td></tr>
+<tr><td>216s</td><td>02:49:17</td><td>4,616</td><td>5,584</td><td>10,200</td><td>23.8</td><td>5.0s</td><td></td></tr>
+<tr><td>221s</td><td>02:49:22</td><td>4,755</td><td>5,445</td><td>10,200</td><td>27.8</td><td>5.0s</td><td></td></tr>
+<tr><td>226s</td><td>02:49:27</td><td>4,888</td><td>5,312</td><td>10,200</td><td>26.6</td><td>5.0s</td><td></td></tr>
+<tr><td>231s</td><td>02:49:32</td><td>4,960</td><td>5,240</td><td>10,200</td><td>14.4</td><td>5.0s</td><td></td></tr>
+<tr><td>236s</td><td>02:49:37</td><td>5,142</td><td>5,058</td><td>10,200</td><td>36.4</td><td>5.0s</td><td></td></tr>
+<tr><td>241s</td><td>02:49:42</td><td>5,333</td><td>4,867</td><td>10,200</td><td>38.2</td><td>5.0s</td><td></td></tr>
+<tr><td>246s</td><td>02:49:47</td><td>5,423</td><td>4,777</td><td>10,200</td><td>18.0</td><td>5.0s</td><td></td></tr>
+<tr><td>1206s</td><td>03:05:47</td><td>5,477</td><td>4,723</td><td>10,200</td><td>0.1</td><td>960.2s</td><td>⚠</td></tr>
+<tr><td>1211s</td><td>03:05:52</td><td>5,477</td><td>4,723</td><td>10,200</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>1216s</td><td>03:05:57</td><td>10,200</td><td>0</td><td>10,200</td><td>944.0</td><td>5.0s</td><td></td></tr>
+<tr><td>1221s</td><td>03:06:02</td><td>10,200</td><td>0</td><td>10,200</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>1226s</td><td>03:06:07</td><td>10,200</td><td>0</td><td>10,200</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>1231s</td><td>03:06:12</td><td>10,200</td><td>0</td><td>10,200</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>1236s</td><td>03:06:17</td><td>10,200</td><td>0</td><td>10,200</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>1241s</td><td>03:06:22</td><td>10,200</td><td>0</td><td>10,200</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>1246s</td><td>03:06:27</td><td>10,200</td><td>0</td><td>10,200</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>1251s</td><td>03:06:32</td><td>10,200</td><td>0</td><td>10,200</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>1256s</td><td>03:06:37</td><td>10,200</td><td>0</td><td>10,200</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>1261s</td><td>03:06:42</td><td>10,200</td><td>0</td><td>10,200</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>1266s</td><td>03:06:47</td><td>10,200</td><td>0</td><td>10,200</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>1271s</td><td>03:06:52</td><td>10,200</td><td>0</td><td>10,200</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>1276s</td><td>03:06:57</td><td>10,200</td><td>0</td><td>10,200</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>1281s</td><td>03:07:02</td><td>10,200</td><td>0</td><td>10,200</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>1286s</td><td>03:07:07</td><td>10,200</td><td>0</td><td>10,200</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>1291s</td><td>03:07:12</td><td>10,200</td><td>0</td><td>10,200</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>1296s</td><td>03:07:17</td><td>10,200</td><td>0</td><td>10,200</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>1301s</td><td>03:07:22</td><td>10,200</td><td>0</td><td>10,200</td><td>0.0</td><td>5.0s</td><td></td></tr>
+<tr><td>1360s</td><td>03:08:21</td><td>8,000</td><td>0</td><td>8,000</td><td>-214.4</td><td>10.3s</td><td></td></tr>
+<tr><td>1370s</td><td>03:08:32</td><td>0</td><td>0</td><td>0</td><td>-780.5</td><td>10.2s</td><td></td></tr>
+
+</table>
+</div>
+
+<div class="chart-box">
+<canvas id="rateChart" height="100"></canvas>
+<div class="note">Y axis capped at p95 × 1.5 to avoid spike distortion</div>
+</div>
+<div class="chart-box">
+<canvas id="countChart" height="100"></canvas>
+</div>
+
+<script>
+const ts = [0, 0, 0.0, 5.0, 10.0, 15.0, 20.0, 25.0, 30.0, 35.0, 40.0, 45.0, 50.0, 55.0, 60.1, 75.4, 80.4, 85.5, 90.5, 95.5, 100.5, 105.5, 110.5, 115.5, 120.5, 125.5, 130.5, 135.5, 140.5, 145.5, 150.5, 155.5, 160.5, 165.5, 170.5, 175.5, 180.5, 185.5, 190.5, 195.5, 200.6, 205.6, 210.6, 215.6, 220.6, 225.6, 230.6, 235.6, 1195.8, 1200.8, 1205.8, 1210.8, 1215.9, 1220.9, 1225.9, 1230.9, 1235.9, 1240.9, 1245.9, 1250.9, 1255.9, 1260.9, 1265.9, 1270.9, 1275.9, 1280.9, 1285.9, 1290.9, 1349.9, 1360.1];
+const gaps = [false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, true, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, true, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false];
+const rates = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 2.0, 1.6, 8.0, 4.6, 7.8, 4.0, 1.4, 2.4, 12.71, 16.85, 19.99, 36.98, 28.19, 18.39, 23.19, 36.38, 36.98, 30.97, 29.59, 29.99, 47.98, 34.58, 38.59, 38.78, 37.16, 33.79, 26.59, 25.0, 15.79, 34.59, 20.59, 43.37, 43.18, 21.59, 10.09, 23.82, 27.78, 26.58, 14.39, 36.39, 38.18, 17.99, 0.06, 0.0, 944.02, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -214.37, -780.51];
+const rolling = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.33, 0.6, 1.93, 2.7, 4.0, 4.66, 4.56, 4.7, 5.48, 5.5, 11.7, 23.23, 28.39, 25.89, 25.35, 27.19, 30.02, 29.02, 29.25, 31.19, 35.32, 35.02, 35.28, 36.59, 37.85, 38.48, 34.92, 33.32, 29.52, 28.82, 26.06, 27.66, 30.42, 29.85, 28.9, 27.11, 28.31, 25.51, 20.71, 23.18, 27.86, 26.89, 0.0, 0.0, 472.01, 314.67, 236.0, 188.8, 157.34, 157.34, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0];
+const ready = [200, 200, 200, 200, 200, 200, 210, 218, 258, 281, 320, 340, 347, 359, 423, 682, 782, 967, 1108, 1200, 1316, 1498, 1683, 1838, 1986, 2136, 2376, 2549, 2742, 2936, 3122, 3291, 3424, 3549, 3628, 3801, 3904, 4121, 4337, 4445, 4496, 4616, 4755, 4888, 4960, 5142, 5333, 5423, 5477, 5477, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 8000, 0];
+const pending = [0, 0, 2500, 5000, 10000, 10000, 9990, 9982, 9942, 9919, 9880, 9860, 9853, 9841, 9777, 9518, 9418, 9233, 9092, 9000, 8884, 8702, 8517, 8362, 8214, 8064, 7824, 7651, 7458, 7264, 7078, 6909, 6776, 6651, 6572, 6399, 6296, 6079, 5863, 5755, 5704, 5584, 5445, 5312, 5240, 5058, 4867, 4777, 4723, 4723, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+const total = [200, 200, 2700, 5200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 10200, 8000, 0];
+const rateData = ts.map((t, i) => ({x: t, y: rates[i]}));
+const rollingData = ts.map((t, i) => ({x: t, y: rolling[i]}));
+const readyData = ts.map((t, i) => ({x: t, y: ready[i]}));
+const pendingData = ts.map((t, i) => ({x: t, y: pending[i]}));
+const totalData = ts.map((t, i) => ({x: t, y: total[i]}));
+const rateColors = gaps.map(g => g ? 'rgba(255,165,0,0.6)' : '#e94560');
+const rateRadii = gaps.map(g => g ? 5 : 2);
+const rateYMax = 70.0;
+
+new Chart(document.getElementById('rateChart'), {
+  type: 'scatter',
+  data: {
+    datasets: [
+      { label: 'Ready Rate (pods/sec)', data: rateData, borderColor: '#e94560',
+        borderWidth: 2, pointBackgroundColor: rateColors, pointRadius: rateRadii,
+        showLine: true, fill: false, tension: 0.1 },
+      { label: 'Rolling Avg', data: rollingData, borderColor: '#0f3460',
+        borderWidth: 2, pointRadius: 0, showLine: true, borderDash: [5,3], fill: false },
+    ]
+  },
+  options: {
+    responsive: true,
+    plugins: {
+      title: { display: true, text: 'Pod Ready Rate Over Time', color: '#eee' },
+      legend: { labels: { color: '#ccc' } },
+      tooltip: {
+        callbacks: {
+          afterLabel: function(ctx) {
+            if (gaps[ctx.dataIndex]) return '⚠ GAP: averaged over ' + (ts[ctx.dataIndex] - (ctx.dataIndex > 0 ? ts[ctx.dataIndex-1] : 0)).toFixed(0) + 's';
+            return '';
+          }
+        }
+      }
+    },
+    scales: {
+      x: { type: 'linear', title: { display: true, text: 'Seconds', color: '#aaa' },
+           ticks: { color: '#888', stepSize: 60 }, min: 0 },
+      y: { title: { display: true, text: 'Pods/sec', color: '#aaa' }, ticks: { color: '#888' },
+           min: 0, ...(rateYMax ? { max: rateYMax } : {}) }
+    }
+  }
+});
+
+new Chart(document.getElementById('countChart'), {
+  type: 'scatter',
+  data: {
+    datasets: [
+      { label: 'Ready', data: readyData, borderColor: '#4ecca3', borderWidth: 2,
+        pointRadius: 1, showLine: true, fill: true, backgroundColor: 'rgba(78,204,163,0.15)', tension: 0.1 },
+      { label: 'Pending', data: pendingData, borderColor: '#e94560', borderWidth: 2,
+        pointRadius: 1, showLine: true, fill: true, backgroundColor: 'rgba(233,69,96,0.15)', tension: 0.1 },
+      { label: 'Total', data: totalData, borderColor: '#888', borderWidth: 1,
+        pointRadius: 0, showLine: true, borderDash: [3,3], fill: false },
+    ]
+  },
+  options: {
+    responsive: true,
+    plugins: {
+      title: { display: true, text: 'Pod Counts Over Time', color: '#eee' },
+      legend: { labels: { color: '#ccc' } }
+    },
+    scales: {
+      x: { type: 'linear', title: { display: true, text: 'Seconds', color: '#aaa' },
+           ticks: { color: '#888', stepSize: 60 }, min: 0 },
+      y: { title: { display: true, text: 'Pods', color: '#aaa' }, ticks: { color: '#888' }, min: 0 }
+    }
+  }
+});
+</script>
+<div class="chart-box">
+<table>
+<tr><th style="text-align:left">Error</th><th>Count</th><th>Object</th><th style="text-align:left">Sample Message</th></tr>
+<tr><td style='color:#e94560'>Failed</td><td>7,269</td><td>Pod</td><td style='color:#999;font-size:12px'>Failed to pull image "polinux/stress-ng:latest": pull QPS exceeded</td></tr>
+<tr><td style='color:#e94560'>FailedCreatePodSandBox</td><td>807</td><td>Pod</td><td style='color:#999;font-size:12px'>Failed to create pod sandbox: rpc error: code = Unknown desc = failed to setup network for sandbox "06d8cdc92f1f2c02471311ff083ce3871fbfd8acd27e8aa76d</td></tr>
+<tr><td style='color:#e94560'>FailedCreatePodContainer</td><td>19</td><td>Pod</td><td style='color:#999;font-size:12px'>unable to ensure pod container exists: failed to create container for [kubepods burstable pod6921f779-7fa1-4368-be96-5ec4292761b0] : unable to start u</td></tr>
+
+</table>
+<div class='note'>11,906 FailedScheduling events filtered (expected during node provisioning)</div>
+</div>
+
+</body></html>

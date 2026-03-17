@@ -1,0 +1,125 @@
+{
+  "nodes_sampled": 10,
+  "healthy": 0,
+  "ssm_failed": 0,
+  "issues": [
+    "CPU pressure avg10=52.2% on ip-100-64-10-200.us-west-2.compute.internal",
+    "Kubelet healthz failed on ip-100-64-10-200.us-west-2.compute.internal: Unauthorized",
+    "CPU pressure avg10=98.3% on ip-100-64-143-95.us-west-2.compute.internal",
+    "Kubelet healthz failed on ip-100-64-143-95.us-west-2.compute.internal: Unauthorized",
+    "CPU pressure avg10=35.0% on ip-100-64-190-216.us-west-2.compute.internal",
+    "Kubelet healthz failed on ip-100-64-190-216.us-west-2.compute.internal: Unauthorized",
+    "CPU pressure avg10=86.1% on ip-100-64-223-255.us-west-2.compute.internal",
+    "Kubelet healthz failed on ip-100-64-223-255.us-west-2.compute.internal: Unauthorized",
+    "CPU pressure avg10=86.2% on ip-100-64-245-215.us-west-2.compute.internal",
+    "Kubelet healthz failed on ip-100-64-245-215.us-west-2.compute.internal: Unauthorized",
+    "CPU pressure avg10=94.3% on ip-100-64-50-56.us-west-2.compute.internal",
+    "Kubelet healthz failed on ip-100-64-50-56.us-west-2.compute.internal: Unauthorized",
+    "Kubelet healthz failed on ip-100-64-99-34.us-west-2.compute.internal: Unauthorized",
+    "CPU pressure avg10=91.7% on ip-192-168-147-90.us-west-2.compute.internal",
+    "Kubelet healthz failed on ip-192-168-147-90.us-west-2.compute.internal: Unauthorized",
+    "Kubelet healthz failed on ip-192-168-186-7.us-west-2.compute.internal: Unauthorized",
+    "CPU pressure avg10=34.3% on ip-192-168-236-188.us-west-2.compute.internal",
+    "Kubelet healthz failed on ip-192-168-236-188.us-west-2.compute.internal: Unauthorized"
+  ],
+  "node_details": [
+    {
+      "node_name": "ip-100-64-10-200.us-west-2.compute.internal",
+      "instance_id": "i-0e3cb798ef579136d",
+      "status": "Success",
+      "issues": [
+        "CPU pressure avg10=52.2% on ip-100-64-10-200.us-west-2.compute.internal",
+        "Kubelet healthz failed on ip-100-64-10-200.us-west-2.compute.internal: Unauthorized"
+      ],
+      "raw_output": "===PSI_START===\nsome avg10=52.22 avg60=54.62 avg300=53.01 total=582235629\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0\n===PSI_SEP===\nsome avg10=0.00 avg60=0.00 avg300=0.00 total=0\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0\n===PSI_SEP===\nsome avg10=0.00 avg60=0.00 avg300=0.00 total=1438874\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=1246815\n===KUBELET_START===\nUnauthorized===HEALTH_SEP===\nactive\n===DISK_START===\nFilesystem      Size  Used Avail Use% Mounted on\n/dev/nvme0n1p1   20G  2.9G   18G  15% /\n===MPSTAT_START===\n"
+    },
+    {
+      "node_name": "ip-100-64-143-95.us-west-2.compute.internal",
+      "instance_id": "i-0844a2a61dd41c4a7",
+      "status": "Success",
+      "issues": [
+        "CPU pressure avg10=98.3% on ip-100-64-143-95.us-west-2.compute.internal",
+        "Kubelet healthz failed on ip-100-64-143-95.us-west-2.compute.internal: Unauthorized"
+      ],
+      "raw_output": "===PSI_START===\nsome avg10=98.26 avg60=98.68 avg300=94.76 total=1004761360\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0\n===PSI_SEP===\nsome avg10=0.00 avg60=0.00 avg300=0.00 total=0\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0\n===PSI_SEP===\nsome avg10=0.00 avg60=0.00 avg300=0.00 total=2040815\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=1561706\n===KUBELET_START===\nUnauthorized===HEALTH_SEP===\nactive\n===DISK_START===\nFilesystem      Size  Used Avail Use% Mounted on\n/dev/nvme0n1p1   20G  3.0G   18G  15% /\n===MPSTAT_START===\n"
+    },
+    {
+      "node_name": "ip-100-64-190-216.us-west-2.compute.internal",
+      "instance_id": "i-09ce2e79e66f2ce15",
+      "status": "Success",
+      "issues": [
+        "CPU pressure avg10=35.0% on ip-100-64-190-216.us-west-2.compute.internal",
+        "Kubelet healthz failed on ip-100-64-190-216.us-west-2.compute.internal: Unauthorized"
+      ],
+      "raw_output": "===PSI_START===\nsome avg10=35.03 avg60=38.19 avg300=36.05 total=372930224\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0\n===PSI_SEP===\nsome avg10=0.00 avg60=0.00 avg300=0.00 total=0\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0\n===PSI_SEP===\nsome avg10=0.00 avg60=0.00 avg300=0.00 total=2788957\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=2730146\n===KUBELET_START===\nUnauthorized===HEALTH_SEP===\nactive\n===DISK_START===\nFilesystem      Size  Used Avail Use% Mounted on\n/dev/nvme0n1p1   20G  2.9G   18G  15% /\n===MPSTAT_START===\n"
+    },
+    {
+      "node_name": "ip-100-64-223-255.us-west-2.compute.internal",
+      "instance_id": "i-074ae718472c863fb",
+      "status": "Success",
+      "issues": [
+        "CPU pressure avg10=86.1% on ip-100-64-223-255.us-west-2.compute.internal",
+        "Kubelet healthz failed on ip-100-64-223-255.us-west-2.compute.internal: Unauthorized"
+      ],
+      "raw_output": "===PSI_START===\nsome avg10=86.09 avg60=92.53 avg300=92.47 total=1041607456\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0\n===PSI_SEP===\nsome avg10=0.00 avg60=0.00 avg300=0.00 total=0\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0\n===PSI_SEP===\nsome avg10=0.04 avg60=0.02 avg300=0.00 total=1620141\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=1131491\n===KUBELET_START===\nUnauthorized===HEALTH_SEP===\nactive\n===DISK_START===\nFilesystem      Size  Used Avail Use% Mounted on\n/dev/nvme1n1p1   20G  3.0G   18G  15% /\n===MPSTAT_START===\n"
+    },
+    {
+      "node_name": "ip-100-64-245-215.us-west-2.compute.internal",
+      "instance_id": "i-04117a547aac6a26b",
+      "status": "Success",
+      "issues": [
+        "CPU pressure avg10=86.2% on ip-100-64-245-215.us-west-2.compute.internal",
+        "Kubelet healthz failed on ip-100-64-245-215.us-west-2.compute.internal: Unauthorized"
+      ],
+      "raw_output": "===PSI_START===\nsome avg10=86.23 avg60=92.45 avg300=92.59 total=1052738378\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0\n===PSI_SEP===\nsome avg10=0.00 avg60=0.00 avg300=0.00 total=0\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0\n===PSI_SEP===\nsome avg10=0.00 avg60=0.00 avg300=0.00 total=1740876\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=1177993\n===KUBELET_START===\nUnauthorized===HEALTH_SEP===\nactive\n===DISK_START===\nFilesystem      Size  Used Avail Use% Mounted on\n/dev/nvme0n1p1   20G  3.0G   18G  15% /\n===MPSTAT_START===\n"
+    },
+    {
+      "node_name": "ip-100-64-50-56.us-west-2.compute.internal",
+      "instance_id": "i-05e321fdcf6d6bf83",
+      "status": "Success",
+      "issues": [
+        "CPU pressure avg10=94.3% on ip-100-64-50-56.us-west-2.compute.internal",
+        "Kubelet healthz failed on ip-100-64-50-56.us-west-2.compute.internal: Unauthorized"
+      ],
+      "raw_output": "===PSI_START===\nsome avg10=94.29 avg60=94.37 avg300=92.58 total=1047002781\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0\n===PSI_SEP===\nsome avg10=0.00 avg60=0.00 avg300=0.00 total=0\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0\n===PSI_SEP===\nsome avg10=0.00 avg60=0.00 avg300=0.00 total=2544869\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=1990534\n===KUBELET_START===\nUnauthorized===HEALTH_SEP===\nactive\n===DISK_START===\nFilesystem      Size  Used Avail Use% Mounted on\n/dev/nvme1n1p1   20G  3.0G   17G  15% /\n===MPSTAT_START===\n"
+    },
+    {
+      "node_name": "ip-100-64-99-34.us-west-2.compute.internal",
+      "instance_id": "i-0ae612b430e39625d",
+      "status": "Success",
+      "issues": [
+        "Kubelet healthz failed on ip-100-64-99-34.us-west-2.compute.internal: Unauthorized"
+      ],
+      "raw_output": "===PSI_START===\nsome avg10=6.39 avg60=30.94 avg300=25.55 total=143671042\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0\n===PSI_SEP===\nsome avg10=0.00 avg60=0.00 avg300=0.00 total=0\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0\n===PSI_SEP===\nsome avg10=0.12 avg60=0.02 avg300=0.00 total=4194274\nfull avg10=0.12 avg60=0.02 avg300=0.00 total=4119161\n===KUBELET_START===\nUnauthorized===HEALTH_SEP===\nactive\n===DISK_START===\nFilesystem      Size  Used Avail Use% Mounted on\n/dev/nvme2n1p1   20G  2.9G   18G  15% /\n===MPSTAT_START===\n"
+    },
+    {
+      "node_name": "ip-192-168-147-90.us-west-2.compute.internal",
+      "instance_id": "i-0873fe78477de2128",
+      "status": "Success",
+      "issues": [
+        "CPU pressure avg10=91.7% on ip-192-168-147-90.us-west-2.compute.internal",
+        "Kubelet healthz failed on ip-192-168-147-90.us-west-2.compute.internal: Unauthorized"
+      ],
+      "raw_output": "===PSI_START===\nsome avg10=91.68 avg60=63.27 avg300=75.92 total=951996299\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0\n===PSI_SEP===\nsome avg10=0.00 avg60=0.00 avg300=0.00 total=0\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0\n===PSI_SEP===\nsome avg10=0.00 avg60=0.00 avg300=0.00 total=1841807\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=1419750\n===KUBELET_START===\nUnauthorized===HEALTH_SEP===\nactive\n===DISK_START===\nFilesystem      Size  Used Avail Use% Mounted on\n/dev/nvme0n1p1   20G  3.0G   18G  15% /\n===MPSTAT_START===\n"
+    },
+    {
+      "node_name": "ip-192-168-186-7.us-west-2.compute.internal",
+      "instance_id": "i-013b06866955bd4a1",
+      "status": "Success",
+      "issues": [
+        "Kubelet healthz failed on ip-192-168-186-7.us-west-2.compute.internal: Unauthorized"
+      ],
+      "raw_output": "===PSI_START===\nsome avg10=3.84 avg60=17.93 avg300=14.95 total=90585014\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0\n===PSI_SEP===\nsome avg10=0.00 avg60=0.00 avg300=0.00 total=0\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0\n===PSI_SEP===\nsome avg10=0.00 avg60=0.00 avg300=0.00 total=4214034\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=4137836\n===KUBELET_START===\nUnauthorized===HEALTH_SEP===\nactive\n===DISK_START===\nFilesystem      Size  Used Avail Use% Mounted on\n/dev/nvme1n1p1   20G  2.9G   18G  15% /\n===MPSTAT_START===\n"
+    },
+    {
+      "node_name": "ip-192-168-236-188.us-west-2.compute.internal",
+      "instance_id": "i-0e791fbba6ba35305",
+      "status": "Success",
+      "issues": [
+        "CPU pressure avg10=34.3% on ip-192-168-236-188.us-west-2.compute.internal",
+        "Kubelet healthz failed on ip-192-168-236-188.us-west-2.compute.internal: Unauthorized"
+      ],
+      "raw_output": "===PSI_START===\nsome avg10=34.28 avg60=37.37 avg300=36.03 total=345789172\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0\n===PSI_SEP===\nsome avg10=0.00 avg60=0.00 avg300=0.00 total=0\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0\n===PSI_SEP===\nsome avg10=0.00 avg60=0.00 avg300=0.00 total=1703802\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=1638559\n===KUBELET_START===\nUnauthorized===HEALTH_SEP===\nactive\n===DISK_START===\nFilesystem      Size  Used Avail Use% Mounted on\n/dev/nvme0n1p1   20G  3.0G   18G  15% /\n===MPSTAT_START===\n"
+    }
+  ]
+}

@@ -1,0 +1,281 @@
+{
+  "timestamp": "2026-03-17T02:40:06.628574+00:00",
+  "config": {
+    "target_pods": 10000,
+    "batch_size": 50,
+    "batch_interval_seconds": 10.0,
+    "rate_drop_threshold_pct": 75.0,
+    "pending_timeout_seconds": 600.0,
+    "rolling_avg_window_seconds": 30.0,
+    "kubeconfig": null,
+    "aws_profile": "shancor+test-Admin",
+    "aws_endpoint_url": "https://api.beta.us-west-2.wesley.amazonaws.com",
+    "flux_repo_path": "/Users/shancor/Projects/flux/flux2",
+    "output_dir": "./scale-test-results",
+    "prometheus_url": null,
+    "event_time_window_minutes": 5,
+    "ssm_log_lines": 500,
+    "ssm_journal_minutes": 10,
+    "auto_approve": true,
+    "exclude_apps": [],
+    "include_apps": [],
+    "cl2_preload": "mixed-workload",
+    "cl2_timeout": 3600.0,
+    "cl2_params": null,
+    "hold_at_peak": 90,
+    "stressor_weights": null,
+    "cpu_limit_multiplier": 2.0,
+    "memory_limit_multiplier": 1.5,
+    "iperf3_server_ratio": 50
+  },
+  "ec2_quotas": {
+    "current_vcpu_usage": 64,
+    "vcpu_quota": 9331,
+    "headroom_vcpus": 9267,
+    "usage_pct": 0.6858857571535741
+  },
+  "subnet_ips": [
+    {
+      "subnet_id": "subnet-06aa0dec2ca9c65fb",
+      "availability_zone": "us-west-2b",
+      "available_ips": 16379,
+      "cidr_block": "100.64.64.0/18"
+    },
+    {
+      "subnet_id": "subnet-064aaa692e8e53bc6",
+      "availability_zone": "us-west-2d",
+      "available_ips": 16379,
+      "cidr_block": "100.64.192.0/18"
+    },
+    {
+      "subnet_id": "subnet-07162c52fd972b95b",
+      "availability_zone": "us-west-2a",
+      "available_ips": 16379,
+      "cidr_block": "100.64.0.0/18"
+    },
+    {
+      "subnet_id": "subnet-04c420060ed298bbe",
+      "availability_zone": "us-west-2c",
+      "available_ips": 16378,
+      "cidr_block": "192.168.192.0/18"
+    },
+    {
+      "subnet_id": "subnet-087b955c24aa38d28",
+      "availability_zone": "us-west-2a",
+      "available_ips": 16201,
+      "cidr_block": "192.168.64.0/18"
+    },
+    {
+      "subnet_id": "subnet-09931fb04fabc99a5",
+      "availability_zone": "us-west-2c",
+      "available_ips": 16379,
+      "cidr_block": "100.64.128.0/18"
+    },
+    {
+      "subnet_id": "subnet-08bfaaeb9104e9bdb",
+      "availability_zone": "us-west-2b",
+      "available_ips": 16040,
+      "cidr_block": "192.168.128.0/18"
+    }
+  ],
+  "total_available_ips": 114135,
+  "nodepool_capacities": [
+    {
+      "name": "alt",
+      "instance_types": [
+        "i8i.8xlarge",
+        "i4i.8xlarge"
+      ],
+      "vcpus_per_instance": {},
+      "max_nodes_per_type": {},
+      "max_pods_per_type": {},
+      "total_max_pods": 0
+    },
+    {
+      "name": "prod",
+      "instance_types": [
+        "c7g.2xlarge",
+        "m7g.2xlarge",
+        "m7g.4xlarge",
+        "r7g.4xlarge",
+        "r7g.8xlarge",
+        "r7g.16xlarge"
+      ],
+      "vcpus_per_instance": {},
+      "max_nodes_per_type": {},
+      "max_pods_per_type": {},
+      "total_max_pods": 0
+    }
+  ],
+  "pods_per_node_breakdowns": [
+    {
+      "instance_type": "i8i.8xlarge",
+      "nodepool_name": "alt",
+      "total_cores": 32,
+      "max_pods_setting": 150,
+      "pods_per_core_setting": 0,
+      "pods_per_core_limit": 150,
+      "effective_max_pods": 150,
+      "system_reserved_cpu": "0m",
+      "kube_reserved_cpu": "0m",
+      "system_reserved_memory": "0Mi",
+      "kube_reserved_memory": "0Mi",
+      "eviction_hard_memory": "5%"
+    },
+    {
+      "instance_type": "i4i.8xlarge",
+      "nodepool_name": "alt",
+      "total_cores": 32,
+      "max_pods_setting": 150,
+      "pods_per_core_setting": 0,
+      "pods_per_core_limit": 150,
+      "effective_max_pods": 150,
+      "system_reserved_cpu": "0m",
+      "kube_reserved_cpu": "0m",
+      "system_reserved_memory": "0Mi",
+      "kube_reserved_memory": "0Mi",
+      "eviction_hard_memory": "5%"
+    },
+    {
+      "instance_type": "c7g.2xlarge",
+      "nodepool_name": "prod",
+      "total_cores": 8,
+      "max_pods_setting": 250,
+      "pods_per_core_setting": 2,
+      "pods_per_core_limit": 16,
+      "effective_max_pods": 16,
+      "system_reserved_cpu": "1",
+      "kube_reserved_cpu": "1",
+      "system_reserved_memory": "2Gi",
+      "kube_reserved_memory": "2Gi",
+      "eviction_hard_memory": "5%"
+    },
+    {
+      "instance_type": "m7g.2xlarge",
+      "nodepool_name": "prod",
+      "total_cores": 8,
+      "max_pods_setting": 250,
+      "pods_per_core_setting": 2,
+      "pods_per_core_limit": 16,
+      "effective_max_pods": 16,
+      "system_reserved_cpu": "1",
+      "kube_reserved_cpu": "1",
+      "system_reserved_memory": "2Gi",
+      "kube_reserved_memory": "2Gi",
+      "eviction_hard_memory": "5%"
+    },
+    {
+      "instance_type": "r7g.4xlarge",
+      "nodepool_name": "prod",
+      "total_cores": 16,
+      "max_pods_setting": 250,
+      "pods_per_core_setting": 2,
+      "pods_per_core_limit": 32,
+      "effective_max_pods": 32,
+      "system_reserved_cpu": "1",
+      "kube_reserved_cpu": "1",
+      "system_reserved_memory": "2Gi",
+      "kube_reserved_memory": "2Gi",
+      "eviction_hard_memory": "5%"
+    },
+    {
+      "instance_type": "r7g.8xlarge",
+      "nodepool_name": "prod",
+      "total_cores": 32,
+      "max_pods_setting": 250,
+      "pods_per_core_setting": 2,
+      "pods_per_core_limit": 64,
+      "effective_max_pods": 64,
+      "system_reserved_cpu": "1",
+      "kube_reserved_cpu": "1",
+      "system_reserved_memory": "2Gi",
+      "kube_reserved_memory": "2Gi",
+      "eviction_hard_memory": "5%"
+    }
+  ],
+  "pod_sizing_recommendations": [
+    {
+      "instance_type": "i8i.8xlarge",
+      "allocatable_cpu_millicores": 30000,
+      "allocatable_memory_mi": 238156,
+      "recommended_cpu_request": "213m",
+      "recommended_memory_request": "1747Mi",
+      "max_pods_by_cpu": 150,
+      "max_pods_by_memory": 150,
+      "effective_density_limit": 150
+    },
+    {
+      "instance_type": "i4i.8xlarge",
+      "allocatable_cpu_millicores": 32000,
+      "allocatable_memory_mi": 262144,
+      "recommended_cpu_request": "213m",
+      "recommended_memory_request": "1747Mi",
+      "max_pods_by_cpu": 150,
+      "max_pods_by_memory": 150,
+      "effective_density_limit": 150
+    },
+    {
+      "instance_type": "c7g.2xlarge",
+      "allocatable_cpu_millicores": 6000,
+      "allocatable_memory_mi": 12288,
+      "recommended_cpu_request": "375m",
+      "recommended_memory_request": "768Mi",
+      "max_pods_by_cpu": 16,
+      "max_pods_by_memory": 16,
+      "effective_density_limit": 16
+    },
+    {
+      "instance_type": "m7g.2xlarge",
+      "allocatable_cpu_millicores": 6000,
+      "allocatable_memory_mi": 28672,
+      "recommended_cpu_request": "375m",
+      "recommended_memory_request": "1792Mi",
+      "max_pods_by_cpu": 16,
+      "max_pods_by_memory": 16,
+      "effective_density_limit": 16
+    },
+    {
+      "instance_type": "r7g.4xlarge",
+      "allocatable_cpu_millicores": 14000,
+      "allocatable_memory_mi": 126976,
+      "recommended_cpu_request": "437m",
+      "recommended_memory_request": "3968Mi",
+      "max_pods_by_cpu": 32,
+      "max_pods_by_memory": 32,
+      "effective_density_limit": 32
+    },
+    {
+      "instance_type": "r7g.8xlarge",
+      "allocatable_cpu_millicores": 30000,
+      "allocatable_memory_mi": 258048,
+      "recommended_cpu_request": "468m",
+      "recommended_memory_request": "4032Mi",
+      "max_pods_by_cpu": 64,
+      "max_pods_by_memory": 64,
+      "effective_density_limit": 64
+    }
+  ],
+  "max_achievable_pods": 30492,
+  "decision": {
+    "decision": "go",
+    "constraints_checked": [
+      "subnet_ips",
+      "vcpu_quota",
+      "nodepool_cpu",
+      "pod_ceiling"
+    ],
+    "blocking_constraints": [],
+    "recommendations": []
+  },
+  "stressor_sizing": {
+    "cpu_request_millicores": 214,
+    "memory_request_mi": 1701,
+    "pod_ceiling": 140,
+    "instance_type": "i8i.8xlarge",
+    "allocatable_cpu_millicores": 30000,
+    "allocatable_memory_mi": 238156,
+    "daemonset_count": 10,
+    "cpu_limit_multiplier": 2.0,
+    "memory_limit_multiplier": 1.5
+  }
+}
