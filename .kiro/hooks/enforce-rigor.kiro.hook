@@ -1,0 +1,16 @@
+{
+  "enabled": true,
+  "name": "Enforce Engineering Rigor",
+  "description": "Before any code write, verify the change follows engineering-rigor.md: no assumptions without testing, full context understood, trade-offs stated, findings validated before implementation.",
+  "version": "1",
+  "when": {
+    "type": "preToolUse",
+    "toolTypes": [
+      "write"
+    ]
+  },
+  "then": {
+    "type": "askAgent",
+    "prompt": "Before proceeding with this write, confirm you are following .kiro/steering/engineering-rigor.md:\n\n1. INVESTIGATION: Have you formed a testable hypothesis and tried to prove it wrong? State what you tested.\n2. CONTEXT: Have you read the callers, tests, and config for the code you're changing? If unsure, check source code or documentation first.\n3. COMMUNICATION: Are there trade-offs or inconsistencies to surface?\n4. EXECUTION: Have you validated findings before writing code? Did you present analysis and get confirmation first?\n\nIf any answer is no, stop the write and do the missing work first. Do not skip steps to save time."
+  }
+}
