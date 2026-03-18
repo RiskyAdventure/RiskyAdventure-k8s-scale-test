@@ -33,3 +33,4 @@ These principles apply to every task. Read them before starting work.
 - Clean up after yourself. If you create temp files, revert bad edits, or leave the working tree dirty, fix it before finishing.
 - Ensure documentation and comments stay accurate after your changes. If you change behavior, update the comments that describe it.
 - If editing a file causes tooling issues (hangs, timeouts), adapt your approach immediately rather than retrying the same thing.
+- Do not bypass test failures. If a test fails, fix it — regardless of whether the failure is "pre-existing" or caused by your changes. Labeling a failure as pre-existing and moving on is not acceptable. Every test run must end with zero failures.

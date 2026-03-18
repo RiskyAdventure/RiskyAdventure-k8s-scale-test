@@ -74,7 +74,7 @@ _safe_text = st.text(
 _attr_keys = st.text(
     min_size=1, max_size=20,
     alphabet=st.characters(whitelist_categories=("L",)),
-)
+).filter(lambda k: k not in ("name", "phase_name"))
 
 _attr_values = st.one_of(
     st.text(min_size=1, max_size=50),
