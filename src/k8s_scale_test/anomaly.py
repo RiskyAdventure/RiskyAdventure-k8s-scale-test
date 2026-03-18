@@ -41,6 +41,7 @@ from k8s_scale_test.models import (
     Alert, Finding, K8sEvent, NodeDiagnostic, NodeMetric,
     ProblemNode, Severity, TestConfig,
 )
+from k8s_scale_test.tracing import span
 
 log = logging.getLogger(__name__)
 
@@ -119,80 +120,96 @@ class AnomalyDetector:
         ns_list = alert.context.get("namespaces", ["default"])
         window = timedelta(minutes=self.config.event_time_window_minutes)
 
-        # Layer 1: K8s events — the starting point for any investigation
-        events = await self._collect_k8s_events(ns_list, window)
-        warning_reasons = self._count_warning_reasons(events)
-        if warning_reasons:
-            log.info("  Events: %s", ", ".join(f"{r}={c}" for r, c in
-                     sorted(warning_reasons.items(), key=lambda x: -x[1])[:5]))
+        with span("alert/" + alert.alert_type.value,
+                   alert_id=str(alert)) as alert_span:
 
-        # KB lookup — check known patterns before full investigation
-        if self.kb_store is not None:
-            matches = self.kb_matcher.match(events, [], self.kb_store.load_all())
-            if matches:
-                best_entry, best_score = matches[0]
-                log.info("  KB match: %s (score=%.2f)", best_entry.entry_id, best_score)
-                now = datetime.now(timezone.utc)
-                finding = Finding(
-                    finding_id=str(uuid.uuid4()),
-                    timestamp=now,
-                    severity=best_entry.severity,
-                    symptom=alert.message,
-                    affected_resources=[],
-                    k8s_events=events,
-                    node_metrics=[],
-                    node_diagnostics=[],
-                    evidence_references=[f"kb_match:{best_entry.entry_id}"],
-                    root_cause=best_entry.root_cause,
-                    resolved=True,
+            # Layer 1: K8s events — the starting point for any investigation
+            with span("investigation/k8s_events"):
+                events = await self._collect_k8s_events(ns_list, window)
+            warning_reasons = self._count_warning_reasons(events)
+            if warning_reasons:
+                log.info("  Events: %s", ", ".join(f"{r}={c}" for r, c in
+                         sorted(warning_reasons.items(), key=lambda x: -x[1])[:5]))
+
+            # KB lookup — check known patterns before full investigation
+            if self.kb_store is not None:
+                matches = self.kb_matcher.match(events, [], self.kb_store.load_all())
+                if matches:
+                    best_entry, best_score = matches[0]
+                    log.info("  KB match: %s (score=%.2f)", best_entry.entry_id, best_score)
+                    now = datetime.now(timezone.utc)
+                    finding = Finding(
+                        finding_id=str(uuid.uuid4()),
+                        timestamp=now,
+                        severity=best_entry.severity,
+                        symptom=alert.message,
+                        affected_resources=[],
+                        k8s_events=events,
+                        node_metrics=[],
+                        node_diagnostics=[],
+                        evidence_references=[f"kb_match:{best_entry.entry_id}"],
+                        root_cause=best_entry.root_cause,
+                        resolved=True,
+                    )
+                    self.kb_store.update_occurrence(best_entry.entry_id, now)
+                    self.evidence_store.save_finding(self.run_id, finding)
+                    if alert_span is not None:
+                        alert_span.set_attribute("root_cause", best_entry.root_cause or "")
+                        alert_span.set_attribute("severity", best_entry.severity.value)
+                    return finding
+
+            # Layer 2: Pod phase breakdown — distinguish Pending vs ContainerCreating
+            with span("investigation/pod_phases"):
+                phase_breakdown = await self._get_pod_phase_breakdown(ns_list)
+            if phase_breakdown:
+                log.info("  Pod phases: %s", ", ".join(f"{k}={v}" for k, v in phase_breakdown.items() if v > 0))
+
+            # Layer 3: Nodes with stuck pods (scheduled but not running)
+            with span("investigation/stuck_nodes"):
+                stuck_nodes = await self._find_stuck_pod_nodes(ns_list)
+
+            # Layer 4: Standard node health (conditions)
+            condition_problems = await self.node_metrics.identify_problem_nodes()
+
+            # Merge investigation targets
+            targets = self._merge_targets(stuck_nodes, condition_problems)
+            if targets:
+                log.info("  Investigating %d nodes (%d stuck-pod, %d bad-condition)",
+                         len(targets), len(stuck_nodes), len(condition_problems))
+
+            # Layer 5: EC2 ENI/prefix state (if AWS client available)
+            eni_evidence = {}
+            if self.aws_client and targets:
+                with span("investigation/eni"):
+                    eni_evidence = await self._collect_eni_state(targets[:10])
+
+            # Layer 6: SSM — dynamic commands based on what events tell us
+            extra_cmds = self._pick_ssm_commands(warning_reasons, eni_evidence)
+            diags: list[NodeDiagnostic] = []
+            with span("investigation/ssm"):
+                for node_name, iid in targets[:3]:
+                    if iid:
+                        diags.append(await self.node_diag.collect(node_name, iid,
+                                     extra_commands=extra_cmds))
+
+            # Correlate everything
+            metrics = [pn.metrics for pn in condition_problems]
+            finding = self._correlate(alert, events, metrics, diags,
+                                      stuck_nodes, eni_evidence, phase_breakdown)
+            self.evidence_store.save_finding(self.run_id, finding)
+
+            # Set root cause and severity on the parent alert span
+            if alert_span is not None:
+                alert_span.set_attribute("root_cause", finding.root_cause or "")
+                alert_span.set_attribute("severity", finding.severity.value)
+
+            if finding.root_cause is None and self._operator_cb:
+                await self._operator_cb(
+                    f"Unresolved: {finding.symptom}",
+                    {"finding_id": finding.finding_id, "severity": finding.severity.value,
+                     "evidence": finding.evidence_references[:5]},
                 )
-                self.kb_store.update_occurrence(best_entry.entry_id, now)
-                self.evidence_store.save_finding(self.run_id, finding)
-                return finding
-
-        # Layer 2: Pod phase breakdown — distinguish Pending vs ContainerCreating
-        phase_breakdown = await self._get_pod_phase_breakdown(ns_list)
-        if phase_breakdown:
-            log.info("  Pod phases: %s", ", ".join(f"{k}={v}" for k, v in phase_breakdown.items() if v > 0))
-
-        # Layer 3: Nodes with stuck pods (scheduled but not running)
-        stuck_nodes = await self._find_stuck_pod_nodes(ns_list)
-
-        # Layer 4: Standard node health (conditions)
-        condition_problems = await self.node_metrics.identify_problem_nodes()
-
-        # Merge investigation targets
-        targets = self._merge_targets(stuck_nodes, condition_problems)
-        if targets:
-            log.info("  Investigating %d nodes (%d stuck-pod, %d bad-condition)",
-                     len(targets), len(stuck_nodes), len(condition_problems))
-
-        # Layer 5: EC2 ENI/prefix state (if AWS client available)
-        eni_evidence = {}
-        if self.aws_client and targets:
-            eni_evidence = await self._collect_eni_state(targets[:10])
-
-        # Layer 6: SSM — dynamic commands based on what events tell us
-        extra_cmds = self._pick_ssm_commands(warning_reasons, eni_evidence)
-        diags: list[NodeDiagnostic] = []
-        for node_name, iid in targets[:3]:
-            if iid:
-                diags.append(await self.node_diag.collect(node_name, iid,
-                             extra_commands=extra_cmds))
-
-        # Correlate everything
-        metrics = [pn.metrics for pn in condition_problems]
-        finding = self._correlate(alert, events, metrics, diags,
-                                  stuck_nodes, eni_evidence, phase_breakdown)
-        self.evidence_store.save_finding(self.run_id, finding)
-
-        if finding.root_cause is None and self._operator_cb:
-            await self._operator_cb(
-                f"Unresolved: {finding.symptom}",
-                {"finding_id": finding.finding_id, "severity": finding.severity.value,
-                 "evidence": finding.evidence_references[:5]},
-            )
-        return finding
+            return finding
 
     # ------------------------------------------------------------------
     # Evidence collection

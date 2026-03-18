@@ -44,6 +44,7 @@ from datetime import datetime, timezone
 from typing import Awaitable, Callable, Optional
 from k8s_scale_test.evidence import EvidenceStore
 from k8s_scale_test.models import Alert, AlertType, RateDataPoint, TestConfig
+from k8s_scale_test.tracing import trace_thread, span
 
 log = logging.getLogger(__name__)
 
@@ -200,14 +201,15 @@ class PodRateMonitor:
         with the monitor.
         """
         def _run_in_thread():
-            loop = asyncio.new_event_loop()
-            try:
-                loop.run_until_complete(cb(alert))
-            except Exception as e:
-                log.error("Alert callback error: %s", e)
-            finally:
-                loop.close()
-                self._alert_in_flight = False
+            with span("anomaly/investigation", alert_type=alert.alert_type.value):
+                loop = asyncio.new_event_loop()
+                try:
+                    loop.run_until_complete(cb(alert))
+                except Exception as e:
+                    log.error("Alert callback error: %s", e)
+                finally:
+                    loop.close()
+                    self._alert_in_flight = False
 
         t = threading.Thread(target=_run_in_thread, daemon=True)
         t.start()
@@ -241,6 +243,7 @@ class PodRateMonitor:
         with self._lock:
             self._ready, self._pending, self._total = ready, pending, total
 
+    @trace_thread("watch/deployments")
     def _watch_deployments(self, ns):
         """Watch Deployment status changes in a single namespace (runs in a thread).
 
@@ -304,6 +307,7 @@ class PodRateMonitor:
                 except Exception: pass
                 _time.sleep(2)
 
+    @trace_thread("watch/nodes")
     def _watch_nodes(self):
         """Watch Node add/delete events across the cluster (runs in a thread).
 
@@ -377,6 +381,7 @@ class PodRateMonitor:
         """
         return sum(d.ready_rate for d in self._window) / len(self._window) if self._window else 0.0
 
+    @trace_thread("ticker")
     def _ticker_thread(self):
         """Main sampling loop — runs in its own thread, sleeps every 5 seconds.
 
@@ -404,6 +409,7 @@ class PodRateMonitor:
         prev_ready, prev_time, first = 0, datetime.now(timezone.utc), True
         last_seen_relist: datetime | None = None
         while self._running:
+          with span("monitor/tick"):
             try:
                 now = datetime.now(timezone.utc)
                 with self._lock:
@@ -465,7 +471,7 @@ class PodRateMonitor:
                     self._dispatch_alert(a)
                 prev_ready, prev_time = ready, now
             except Exception as e: log.error("Ticker error: %s", e)
-            _time.sleep(self._TICK_INTERVAL)
+          _time.sleep(self._TICK_INTERVAL)
 
     def _dispatch_alert(self, alert):
         """Fire alert callbacks from the ticker thread.

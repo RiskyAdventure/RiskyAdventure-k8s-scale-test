@@ -14,6 +14,8 @@ from pathlib import Path
 
 from k8s_scale_test.models import TestConfig
 
+log = logging.getLogger(__name__)
+
 
 def _add_run_args(p: argparse.ArgumentParser) -> None:
     """Add the scale-test run arguments to *p*."""
@@ -50,6 +52,8 @@ def _add_run_args(p: argparse.ArgumentParser) -> None:
                    help="CloudWatch log group for node logs")
     p.add_argument("--eks-cluster-name", type=str, default=None,
                    help="EKS cluster name for EKS MCP server")
+    p.add_argument("--enable-tracing", action="store_true",
+                   help="Enable OpenTelemetry tracing (exports to X-Ray)")
 
 
 def _add_kb_subcommands(subparsers: argparse._SubParsersAction) -> None:
@@ -190,6 +194,7 @@ def main(argv: list[str] | None = None) -> None:
         amp_workspace_id=args.amp_workspace_id,
         cloudwatch_log_group=args.cloudwatch_log_group,
         eks_cluster_name=args.eks_cluster_name,
+        enable_tracing=args.enable_tracing,
     )
 
     from k8s_scale_test.controller import ScaleTestController
@@ -221,13 +226,25 @@ def main(argv: list[str] | None = None) -> None:
         logging.error("Failed to initialize AWS client: %s", exc)
         sys.exit(1)
 
+    if config.enable_tracing:
+        from k8s_scale_test.tracing import init_tracing
+        if not init_tracing(aws_client):
+            log.warning("Tracing initialization failed, continuing without tracing")
+
     controller = ScaleTestController(config, evidence_store, k8s_client, aws_client)
 
     try:
         summary = asyncio.run(controller.run())
         _print_report(summary, config)
+        if config.enable_tracing:
+            from k8s_scale_test.tracing import shutdown, get_trace_url
+            shutdown()
+            print(f"  X-Ray trace: {get_trace_url(summary.run_id)}")
     except KeyboardInterrupt:
         print("\nTest interrupted by user. Partial results saved.")
+        if config.enable_tracing:
+            from k8s_scale_test.tracing import shutdown
+            shutdown()
         sys.exit(130)
 
 

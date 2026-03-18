@@ -946,7 +946,10 @@ class PreflightChecker:
         obs_total += 1
         if self.config.eks_cluster_name:
             try:
-                eks = self.aws_client.client("eks", region_name="us-west-2")
+                eks_kwargs = {"region_name": "us-west-2"}
+                if self.config.aws_endpoint_url:
+                    eks_kwargs["endpoint_url"] = self.config.aws_endpoint_url
+                eks = self.aws_client.client("eks", **eks_kwargs)
                 cluster = eks.describe_cluster(name=self.config.eks_cluster_name)
                 status = cluster.get("cluster", {}).get("status", "")
                 if status == "ACTIVE":
@@ -998,6 +1001,8 @@ class PreflightChecker:
             max_achievable_pods=max_achievable,
             decision=decision,
             stressor_sizing=stressor_sizing,
+            obs_passed=obs_ok,
+            obs_total=obs_total,
         )
 
         log.info("Preflight: max_achievable=%d, target=%d, decision=%s",

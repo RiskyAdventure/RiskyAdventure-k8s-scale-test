@@ -14,6 +14,15 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+tracing = [
+    "opentelemetry-api",
+    "opentelemetry-sdk",
+    "opentelemetry-exporter-otlp-proto-http",
+    "opentelemetry-instrumentation-threading",
+    "opentelemetry-instrumentation-botocore",
+    "amazon-opentelemetry-distro",
+    "opentelemetry-sdk-extension-aws",
+]
 dev = [
     "hypothesis>=6.92.0",
     "pytest>=7.4.0",

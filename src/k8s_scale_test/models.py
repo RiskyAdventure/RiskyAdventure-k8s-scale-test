@@ -168,6 +168,7 @@ class TestConfig(_SerializableMixin):
     kb_s3_prefix: str = "kb-entries/"
     kb_match_threshold: float = 0.7
     kb_auto_ingest: bool = True
+    enable_tracing: bool = False
 
 
 # ---------------------------------------------------------------------------
@@ -286,6 +287,8 @@ class PreflightReport(_SerializableMixin):
     max_achievable_pods: int
     decision: GoNoGoDecision
     stressor_sizing: Optional[StressorSizing] = None
+    obs_passed: int = 0
+    obs_total: int = 0
 
 
 # ---------------------------------------------------------------------------
