@@ -659,35 +659,46 @@ class ScaleTestController:
         log.info("  Nodes drained in %.1fm", (datetime.now(timezone.utc) - node_start).total_seconds() / 60)
 
     async def _git_commit_push(self, message: str) -> None:
-        """Git add, commit, push, and trigger Flux reconciliation."""
+        """Git add, commit, push, and trigger Flux reconciliation.
+
+        All subprocess calls run in a thread pool executor to avoid
+        blocking the asyncio event loop. The Flux reconcile command
+        has a 60s timeout which would otherwise stall the entire
+        monitoring pipeline.
+        """
         import subprocess
         repo = self.config.flux_repo_path
-        try:
-            subprocess.run(["git", "add", "-A"], cwd=repo, check=True, capture_output=True)
-            result = subprocess.run(
-                ["git", "diff", "--cached", "--quiet"], cwd=repo, capture_output=True,
-            )
-            if result.returncode == 0:
-                log.info("No changes to commit")
-                return
-            subprocess.run(
-                ["git", "commit", "-m", message], cwd=repo, check=True, capture_output=True,
-            )
-            subprocess.run(
-                ["git", "push"], cwd=repo, check=True, capture_output=True,
-            )
-            log.info("Committed and pushed: %s", message)
-            # Trigger Flux reconciliation so changes apply immediately
+
+        def _sync_git_and_flux():
             try:
-                subprocess.run(
-                    ["flux", "reconcile", "kustomization", "app", "--with-source"],
-                    check=True, capture_output=True, timeout=60,
+                subprocess.run(["git", "add", "-A"], cwd=repo, check=True, capture_output=True)
+                result = subprocess.run(
+                    ["git", "diff", "--cached", "--quiet"], cwd=repo, capture_output=True,
                 )
-                log.info("Flux reconciliation triggered")
-            except Exception as exc:
-                log.info("Flux reconcile timed out (will auto-sync): %s", exc)
-        except subprocess.CalledProcessError as exc:
-            log.error("Git operation failed: %s\nstderr: %s", exc, exc.stderr.decode() if exc.stderr else "")
+                if result.returncode == 0:
+                    log.info("No changes to commit")
+                    return
+                subprocess.run(
+                    ["git", "commit", "-m", message], cwd=repo, check=True, capture_output=True,
+                )
+                subprocess.run(
+                    ["git", "push"], cwd=repo, check=True, capture_output=True,
+                )
+                log.info("Committed and pushed: %s", message)
+                # Trigger Flux reconciliation so changes apply immediately
+                try:
+                    subprocess.run(
+                        ["flux", "reconcile", "kustomization", "app", "--with-source"],
+                        check=True, capture_output=True, timeout=60,
+                    )
+                    log.info("Flux reconciliation triggered")
+                except Exception as exc:
+                    log.info("Flux reconcile timed out (will auto-sync): %s", exc)
+            except subprocess.CalledProcessError as exc:
+                log.error("Git operation failed: %s\nstderr: %s", exc, exc.stderr.decode() if exc.stderr else "")
+
+        loop = asyncio.get_event_loop()
+        await loop.run_in_executor(None, _sync_git_and_flux)
 
     async def _suspend_flux(self) -> None:
         """No longer needed — scaling is done through Flux repo directly."""
