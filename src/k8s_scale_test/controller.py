@@ -1130,28 +1130,22 @@ class ScaleTestController:
         if gaps:
             issues.append(f"{len(gaps)} gap(s) in rate data — chart rates may be averaged over long intervals")
 
-        # Check 3a: timestamp-based gap detection — catches invisible gaps
-        # from hold suppression or other causes where is_gap wasn't set.
-        # Only check non-hold points during the scaling phase (before ready
-        # count starts decreasing, which indicates cleanup).
+        # Check 3a: timestamp-based gap detection — catches gaps during
+        # active scaling where the rate data should be continuous.
+        # "Active scaling" = pending > 0 (pods are being created/scheduled).
+        # Gaps during infrastructure wait, hold-at-peak, and cleanup are
+        # expected and not flagged.
         from datetime import datetime as _dt_gap
-        scaling_points = []
-        for p in points:
-            scaling_points.append(p)
-            # Stop at the first point where ready decreases with pending=0
-            # (cleanup phase — not part of the scaling data)
-            if (len(scaling_points) > 1
-                    and p.get("ready_count", 0) < scaling_points[-2].get("ready_count", 0)
-                    and p.get("pending_count", 0) == 0):
-                scaling_points.pop()  # remove the cleanup point
-                break
+        active_scaling_points = [
+            p for p in points if p.get("pending_count", 0) > 0
+        ]
 
         gap_threshold = self._TICK_INTERVAL * 3 if hasattr(self, '_TICK_INTERVAL') else 15.0
         timestamp_gaps = []
-        for i in range(1, len(scaling_points)):
+        for i in range(1, len(active_scaling_points)):
             try:
-                t0 = _dt_gap.fromisoformat(scaling_points[i-1]["timestamp"].replace("Z", "+00:00"))
-                t1 = _dt_gap.fromisoformat(scaling_points[i]["timestamp"].replace("Z", "+00:00"))
+                t0 = _dt_gap.fromisoformat(active_scaling_points[i-1]["timestamp"].replace("Z", "+00:00"))
+                t1 = _dt_gap.fromisoformat(active_scaling_points[i]["timestamp"].replace("Z", "+00:00"))
                 interval = (t1 - t0).total_seconds()
                 if interval > gap_threshold:
                     timestamp_gaps.append((i, interval))
@@ -1159,7 +1153,7 @@ class ScaleTestController:
                 continue
         if timestamp_gaps:
             gap_details = ", ".join(f"point {i}: {iv:.0f}s" for i, iv in timestamp_gaps[:5])
-            issues.append(f"{len(timestamp_gaps)} timestamp gap(s) >15s in scaling data: {gap_details}")
+            issues.append(f"{len(timestamp_gaps)} timestamp gap(s) >15s in active scaling data: {gap_details}")
 
         # Check 4: observer cross-check
         # Observer uses pod list API (actual Running pods) vs monitor's deployment watch
