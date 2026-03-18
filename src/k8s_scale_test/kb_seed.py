@@ -29,34 +29,103 @@ def _build_seed_entries() -> list[KBEntry]:
             category="networking",
             signature=Signature(
                 event_reasons=["FailedCreatePodSandBox"],
-                log_patterns=["failed to generate Unique MAC"],
+                log_patterns=[
+                    "failed to generate Unique MAC",
+                    "results may be incomplete or inconsistent",
+                ],
                 metric_conditions=[],
                 resource_kinds=["Pod"],
             ),
             root_cause=(
-                "At high pod density (>100 pods/node), the VPC CNI plugin "
-                "exhausts the MAC address space when creating veth pairs. "
-                "The random MAC generation collides with existing interfaces, "
-                "causing pod sandbox creation to fail."
+                "At high pod density (>100 pods/node), the VPC CNI's "
+                "generateUniqueRandomMAC() function fails due to persistent "
+                "netlink dump interruptions (NLM_F_DUMP_INTR). The function "
+                "calls LinkList() to enumerate existing MACs. During "
+                "concurrent pod creation, the kernel's netlink dump is "
+                "interrupted by interface changes, returning "
+                "ErrDumpInterrupted ('results may be incomplete or "
+                "inconsistent'). The VPC CNI wraps LinkList() with "
+                "retryOnErrDumpInterrupted (5 retries, 100ms delay), but "
+                "under extreme concurrency (140+ pods being created "
+                "simultaneously on a node), the dump interruption persists "
+                "across all 5 retries. The error propagates up as "
+                "'failed to generate Unique MAC addr for host side veth: "
+                "...results may be incomplete or inconsistent'. This is "
+                "NOT a birthday paradox — the 46-bit locally-administered "
+                "MAC space (2^46 addresses) makes random collision "
+                "astronomically unlikely. The root cause is sustained "
+                "netlink dump interruption under concurrent veth creation "
+                "that exceeds the retry budget. Pods eventually succeed "
+                "on kubelet retry once interface churn subsides."
             ),
             recommended_actions=[
-                "Upgrade VPC CNI to v1.12.4+ which has improved MAC generation",
-                "Reduce pods-per-node via NodePool maxPods setting",
-                "Restart aws-node DaemonSet to clear stale ENI state",
+                "Reduce maxPods per node to 110 to lower concurrent veth "
+                "creation pressure (tested threshold: collisions start at "
+                "~120+ pods/node with concurrent creation)",
+                "Use larger instance types to spread pods across more nodes "
+                "and reduce per-node density",
+                "Monitor per-node pod density and alert when approaching "
+                "120 pods/node (add ObservabilityScanner query)",
+                "File upstream issue on aws/amazon-vpc-cni-k8s to increase "
+                "MAX_MAC_GENERATION_ATTEMPTS or implement retry-with-backoff "
+                "in generateUniqueRandomMAC()",
+                "File upstream issue to handle NLM_F_DUMP_INTR by retrying "
+                "the LinkList() call when the dump is interrupted",
             ],
             severity=Severity.CRITICAL,
             affected_versions=[
                 AffectedVersions(
                     component="vpc-cni",
                     min_version=None,
-                    max_version="1.12.3",
-                    fixed_in="1.12.4",
+                    max_version=None,
+                    fixed_in=None,
                 ),
             ],
             created_at=now,
             last_seen=now,
             occurrence_count=0,
             status="active",
+            review_notes=(
+                "Observed at VPC CNI v1.20.4-eksbuild.2 on EKS cluster "
+                "tf-shane (March 2026). Previous KB claimed fixed in "
+                "v1.12.4 — this is WRONG. The v1.12.4 fix may have "
+                "addressed a different variant but the netlink dump "
+                "interruption persists under high concurrency. Current "
+                "master has retryOnErrDumpInterrupted (5 retries, 100ms "
+                "delay) wrapping LinkList() — unclear if this existed in "
+                "v1.20.4 or was added later. Either way, the retry budget "
+                "is insufficient at 140 pods/node. Source code confirmed "
+                "in driver.go: generateUniqueRandomMAC() with "
+                "MAX_MAC_GENERATION_ATTEMPTS=10, and netlinkwrapper with "
+                "retryOnErrDumpInterrupted maxAttempts=5. Error path: "
+                "LinkList() fails persistently → error propagates as "
+                "'results may be incomplete or inconsistent' (the exact "
+                "errDumpInterrupted.Error() string from vishvananda/"
+                "netlink v1.3.1). Impact: 3,673 FailedCreatePodSandBox "
+                "events across 2,884 pods in a 30K pod scale test (244 "
+                "nodes, ~140 pods/node on i4i.8xlarge with prefix "
+                "delegation). Adds 3-5 minutes of tail latency. See Go "
+                "issue #52137 for the underlying NLM_F_DUMP_INTR bug."
+            ),
+            alternative_explanations=[
+                "Birthday paradox in MAC space — RULED OUT: 310 interfaces "
+                "in 2^46 space gives P(collision)=6.8e-10 per attempt, "
+                "P(10 consecutive)≈0",
+                "IPAMD IP exhaustion — RULED OUT: subnet IPs were plentiful "
+                "(113K available), prefix delegation enabled",
+                "Stale ENI state — UNLIKELY: restarting aws-node does not "
+                "address the netlink race condition",
+            ],
+            checkpoint_questions=[
+                "What is the per-node pod count when collisions start? "
+                "Query AMP: max(kubelet_running_pods) by (node)",
+                "Are IPAMD logs showing the specific 'failed to generate "
+                "unique mac after 10 attempts' message?",
+                "Does reducing maxPods to 110 eliminate the collisions "
+                "entirely, or just reduce frequency?",
+                "Is the netlink socket receive buffer size tunable on "
+                "these nodes (sysctl net.core.rmem_max)?",
+            ],
         ),
         KBEntry(
             entry_id="ipamd-ip-exhaustion",

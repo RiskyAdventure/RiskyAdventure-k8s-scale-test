@@ -233,6 +233,23 @@ class ScaleTestController:
                 "Preflight returned NO_GO. Review the report.", {"report": "preflight.json"}
             )
 
+        # ── Phase 1b: Observability Check ───────────────────────────────
+        # If any observability backends failed their preflight check, warn
+        # the operator. Investigation capability will be degraded.
+        if report.obs_total > 0 and report.obs_passed < report.obs_total:
+            failed = report.obs_total - report.obs_passed
+            obs_response = await self._prompt_operator(
+                f"Observability: {failed}/{report.obs_total} checks failed — "
+                f"investigation capability will be degraded. Continue or abort?",
+                {"obs_passed": report.obs_passed, "obs_total": report.obs_total},
+            )
+            if obs_response and obs_response.lower() in ("abort", "cancel"):
+                return self._make_summary(run_id, start, report, ScalingResult(
+                    steps=[], total_pods_requested=0, total_pods_ready=0,
+                    total_nodes_provisioned=0, peak_ready_rate=0.0,
+                    completed=False, halt_reason="operator_aborted_observability",
+                ))
+
         # ── Phase 2: Operator Approval ──────────────────────────────────
         approval = await self._prompt_operator(
             "Preflight complete. Approve to proceed with scaling?",
