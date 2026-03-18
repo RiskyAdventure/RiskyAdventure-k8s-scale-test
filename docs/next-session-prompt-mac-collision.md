@@ -2,6 +2,56 @@
 
 Read `.kiro/steering/engineering-rigor.md` before starting any work.
 
+## Primary Goal
+
+Solve the VPC CNI MAC address collision problem that adds 3-5 minutes of tail latency to 30K pod scale tests.
+
+## Secondary Goal — Module Efficacy Test
+
+Use this investigation as a live test of the monitoring and investigation pipeline we built. The modules should be doing the heavy lifting — you drive them, evaluate their output, and note where they fall short.
+
+### How to Use the Pipeline
+
+1. **Run a scale test** to reproduce the MAC collision (30K pods, same config as previous runs). Use the runbook at `.kiro/steering/run-scale-test.md`.
+
+2. **Let the pipeline investigate first.** When FailedCreatePodSandBox events fire, the anomaly detector will run its full pipeline. Wait for the finding before doing your own investigation. Check:
+   - Did the **AnomalyDetector** correctly identify MAC collision as the root cause? (Layer 4.5 AMP metrics, Layer 6 SSM diagnostics)
+   - Did the **ObservabilityScanner** detect the issue proactively before the rate drop alert?
+   - Did the **SharedContext** correlation match scanner findings to the anomaly alert? Were matches strong or weak? Why?
+   - Did the **FindingReviewer** assign appropriate confidence? Were its alternative explanations useful? Were checkpoint questions actionable?
+   - Did the **KB matcher** match the `ipamd-mac-collision` entry? What score?
+
+3. **Use AMP/CloudWatch to dig deeper.** After the pipeline produces its finding:
+   - Query AMP for per-node pod counts to identify which nodes hit the collision threshold
+   - Query CloudWatch dataplane logs for the exact "failed to generate Unique MAC" error messages — extract node names, timestamps, retry counts
+   - Use the EKS MCP tools to check node conditions and pod states on affected nodes
+
+4. **Document pipeline gaps.** For each module, note:
+   - What it found correctly
+   - What it missed
+   - What it got wrong
+   - What additional data it should have collected but didn't
+   - Specific improvements to make (new queries, better thresholds, missing evidence types)
+
+### Pipeline Evaluation Checklist
+
+After the investigation, answer these questions:
+
+| Module | Question | Answer |
+|--------|----------|--------|
+| AnomalyDetector | Did it identify MAC collision as root cause? | |
+| AnomalyDetector | Did the AMP layer (4.5) provide useful evidence? | |
+| AnomalyDetector | Did SSM diagnostics (Layer 6) capture the IPAMD logs showing the collision? | |
+| ObservabilityScanner | Did any Tier 1 query detect the issue before the rate drop? | |
+| ObservabilityScanner | Should there be a new scanner query for per-node pod density? | |
+| SharedContext | Did correlation match scanner findings to the alert? Strong or weak? | |
+| SharedContext | Was the 120s correlation window appropriate? | |
+| FindingReviewer | Was the confidence level appropriate? | |
+| FindingReviewer | Were alternative explanations relevant? | |
+| FindingReviewer | Were checkpoint questions actionable for this specific issue? | |
+| KB Matcher | Did it match `ipamd-mac-collision`? What score? | |
+| KB Matcher | Is the KB entry accurate enough to be useful? | |
+
 ## Problem Statement
 
 During 30K pod scale tests on EKS, pods fail with `FailedCreatePodSandBox` and the error:
@@ -40,7 +90,8 @@ This happens at high pod density (>100 pods/node on i4i.8xlarge instances with 1
 - At what pod density does the collision probability become significant?
 - Model this mathematically: given N existing veth pairs on a node, what's the probability of collision on the (N+1)th?
 - Cross-reference with our test data: at what pod count per node did we start seeing FailedCreatePodSandBox?
-- Check the IPAMD logs from our test runs for the exact collision counts per node:
+- Use AMP to query per-node pod counts at the time of the collisions
+- Check the IPAMD logs from our test runs:
   - `scale-test-results/2026-03-18_14-42-47/diagnostics/` — SSM outputs from affected nodes
   - `scale-test-results/2026-03-18_14-42-47/events.jsonl` — K8s events with FailedCreatePodSandBox counts
 
@@ -74,6 +125,7 @@ For each solution, assess: effectiveness, complexity, risk, and whether it requi
 - Retry logic in the scale test controller (detect MAC collision, wait, retry)
 - Exclude affected nodes from further scheduling temporarily
 - Monitor per-node pod density and alert before hitting the collision threshold
+- Add a new ObservabilityScanner query that tracks per-node pod density and alerts when approaching the collision threshold
 
 ### 5. Verify and Update the KB Entry
 
@@ -98,18 +150,20 @@ Using data from our test runs:
 ## Key Files
 
 - `src/k8s_scale_test/kb_seed.py` — KB entry to update
+- `src/k8s_scale_test/anomaly.py` — anomaly detector (evaluate its MAC collision detection)
+- `src/k8s_scale_test/observability.py` — scanner (evaluate proactive detection, consider new queries)
+- `src/k8s_scale_test/shared_context.py` — cross-source correlation (evaluate matching quality)
+- `src/k8s_scale_test/reviewer.py` — skeptical review (evaluate confidence and alternatives)
+- `src/k8s_scale_test/controller.py` — controller wiring (evaluate end-to-end pipeline)
+- `.kiro/steering/run-scale-test.md` — runbook for launching tests
 - `scale-test-results/2026-03-18_14-42-47/` — latest test run with MAC collisions
 - `scale-test-results/2026-03-18_14-42-47/events.jsonl` — K8s events
 - `scale-test-results/2026-03-18_14-42-47/findings/` — anomaly detector findings
 - `scale-test-results/2026-03-18_14-42-47/diagnostics/` — SSM node diagnostics
-- `src/k8s_scale_test/anomaly.py` — where FailedCreatePodSandBox is detected
 
 ## Deliverables
 
-1. A written analysis document covering:
-   - Root cause analysis with source code references
-   - Mathematical model of collision probability vs pod density
-   - Threshold determination (at what N does P(collision) > 1%?)
-   - Comparison of solution approaches with trade-offs
-2. Updated KB entry with accurate information
-3. Recommended next steps (which solution to implement first)
+1. **MAC collision solution** — implement the best fix (or combination of fixes) and validate with a test run
+2. **Updated KB entry** — accurate root cause, correct version info, threshold data, actionable recommendations
+3. **Pipeline evaluation report** — fill in the evaluation checklist above, document gaps found, and file improvements as tasks or specs
+4. **New scanner query** (if warranted) — a per-node pod density query that alerts before hitting the collision threshold
