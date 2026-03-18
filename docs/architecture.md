@@ -62,6 +62,12 @@ Every Python file in `src/k8s_scale_test/` has one job. Here's what each one doe
 │  (node condition     (SSM commands to      (K8s event           │
 │   analysis)           collect node logs)    streaming)           │
 │                                                                 │
+│  reviewer.py         shared_context.py                          │
+│  (skeptical review   (in-memory shared                          │
+│   of findings —       state for scanner                         │
+│   independent re-     ↔ anomaly detector                        │
+│   verification)       correlation)                              │
+│                                                                 │
 ├─────────────────────────────────────────────────────────────────┤
 │                    INFRASTRUCTURE LAYER                          │
 │                                                                 │
@@ -108,19 +114,26 @@ This diagram shows what data flows where during the scaling phase — the most a
        │            ▼
        │       Anomaly Detector
        │       │
+       │       ├──► SharedContext Lookup (recent scanner findings)
        │       ├──► K8s Events (Warning events from cluster)
        │       ├──► Pod Phase Breakdown (Pending vs Running)
        │       ├──► Stuck Pod Nodes (which nodes have problems)
+       │       ├──► AMP Metrics (CPU, memory, network, pod restarts)
        │       ├──► EC2 ENI State (network interface / IP data)
        │       ├──► SSM Commands (node logs, PSI, disk, CPU)
        │       ├──► KB Lookup (known failure patterns)
        │       │
        │       └──► Finding (saved to evidence store)
+       │                 │
+       │                 └──► FindingReviewer (async, non-blocking)
+       │                       Re-queries AMP/CW independently,
+       │                       assigns confidence, appends review
        │
        │  ObservabilityScanner (background task, 15-30s)
        │  │
        │  ├──► AMP PromQL (fleet-wide CPU, memory, pending, Karpenter)
        │  ├──► CloudWatch Logs Insights (error patterns, on-demand)
+       │  ├──► SharedContext (in-memory, for anomaly detector correlation)
        │  │
        │  └──► scanner_findings.jsonl (evidence store)
        │

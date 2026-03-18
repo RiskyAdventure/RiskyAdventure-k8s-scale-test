@@ -14,10 +14,21 @@ The anomaly detector doesn't run continuously. It activates when the monitor fir
 
 ## Investigation Pipeline
 
-When an alert fires, the anomaly detector runs a 6-layer evidence collection pipeline. Each layer adds more detail. The layers run in order because later layers use results from earlier ones.
+When an alert fires, the anomaly detector runs a multi-layer evidence collection pipeline. Each layer adds more detail. The layers run in order because later layers use results from earlier ones.
 
 ```
 Alert received
+  │
+  ▼
+Layer 0: SharedContext Lookup ────────────────────────────────────
+  │  Query the in-memory SharedContext for recent scanner findings
+  │  that overlap the alert's time window (±correlation_window,
+  │  default 120s). If the ObservabilityScanner already detected
+  │  the issue proactively, the anomaly detector references it
+  │  instead of re-collecting the same data.
+  │
+  │  Matches are classified as "strong" (temporal + resource
+  │  overlap) or "weak" (temporal only).
   │
   ▼
 Layer 1: K8s Events ──────────────────────────────────────────────
@@ -44,12 +55,27 @@ Layer 3: Pod Phase Breakdown ─────────────────
   │  Example: Pending=20453, Running=1648
   │
   ▼
-Layer 4: Stuck Pod Nodes ─────────────────────────────────────────
+Layer 4: Stuck Pod Nodes + Conditions ────────────────────────────
   │  Find which nodes have Pending pods. Group by node to
   │  identify the worst-affected nodes. Also check node
   │  conditions (NotReady, DiskPressure, MemoryPressure).
   │
   │  Example: 20 nodes with stuck pods, 0 with bad conditions
+  │
+  │  After this layer, Layer 0's scanner findings are matched
+  │  against the alert's affected resources (stuck nodes, event
+  │  objects, namespaces) to classify strong vs weak matches.
+  │
+  ▼
+Layer 4.5: AMP Metric Query ─────────────────────────────────────
+  │  Query AMP/Prometheus for node-level metrics: CPU utilization,
+  │  memory utilization, network error rates, IPAMD metrics, and
+  │  pod restart counts. Uses the AMPMetricCollector from
+  │  health_sweep.py (SigV4 signing, concurrent PromQL execution).
+  │
+  │  Only runs when an AMPMetricCollector is configured. Threshold
+  │  violations (CPU > 90%, memory > 90%, network errors > 0,
+  │  pod restarts > 5) are added to evidence and root cause.
   │
   ▼
 Layer 5: EC2 ENI State ───────────────────────────────────────────
@@ -79,8 +105,18 @@ Correlate ───────────────────────�
   │  - Root cause (human-readable explanation)
   │  - Affected resources (node names, pod names)
   │  - Evidence references (what was checked)
+  │  - Scanner correlation (strong/weak matches from Layer 0)
+  │  - AMP metric evidence (violations or clean checks)
   │
   └──► Save to findings/{finding_id}.json
+       │
+       ▼
+  Skeptical Review (async, non-blocking) ─────────────────────────
+       The FindingReviewer independently re-verifies the finding
+       by re-querying AMP/CloudWatch with different query approaches,
+       checking for staleness, assigning confidence (high/medium/low),
+       listing alternative explanations, and generating checkpoint
+       questions. The review is appended to the finding JSON.
 ```
 
 ## Dynamic SSM Command Selection
@@ -113,6 +149,11 @@ The `_extract_root_cause` method scans all collected evidence and builds a human
 | dmesg shows OOM kills | Memory exhaustion on node |
 | PSI avg10 > 25% for CPU | CPU contention (processes waiting for CPU time) |
 | mpstat shows cores with idle < 10% | Specific CPU cores saturated |
+| AMP: CPU > 90% on node | Node CPU saturation (from AMP/Prometheus) |
+| AMP: Memory > 90% on node | Node memory pressure (from AMP/Prometheus) |
+| AMP: Network errors > 0/s on node | CNI or VPC networking issues (from AMP/Prometheus) |
+| AMP: Pod restarts > 5 on node | Crashloops or OOM kills on node (from AMP/Prometheus) |
+| Scanner pre-detected: {title} | ObservabilityScanner found the issue before the alert fired |
 
 ## Severity Assessment
 

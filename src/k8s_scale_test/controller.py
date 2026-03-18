@@ -12,6 +12,7 @@ from typing import Optional
 
 from k8s_scale_test.agent_context import ContextFileWriter
 from k8s_scale_test.anomaly import AnomalyDetector
+from k8s_scale_test.reviewer import FindingReviewer
 from k8s_scale_test.cl2_parser import CL2ResultParser
 from k8s_scale_test.diagnostics import NodeDiagnosticsCollector
 from k8s_scale_test.evidence import EvidenceStore
@@ -164,6 +165,9 @@ class ScaleTestController:
         self._scanner: ObservabilityScanner | None = None
         self._scanner_task: asyncio.Task | None = None
         self._scanner_findings: list[ScanResult] = []
+        self._shared_ctx: SharedContext | None = None
+        self._reviewer: FindingReviewer | None = None
+        self._review_tasks: list[asyncio.Task] = []
 
     async def run(self) -> TestRunSummary:
         """Execute the full test lifecycle.
@@ -365,12 +369,28 @@ class ScaleTestController:
                 kb_store = None
                 kb_matcher = None
 
+        # Create AMP collector for anomaly detector (if configured)
+        amp_collector = None
+        if self.config.amp_workspace_id or self.config.prometheus_url:
+            try:
+                from k8s_scale_test.health_sweep import AMPMetricCollector
+
+                amp_collector = AMPMetricCollector(
+                    amp_workspace_id=self.config.amp_workspace_id,
+                    prometheus_url=self.config.prometheus_url,
+                    aws_profile=getattr(self.config, "aws_profile", None),
+                )
+            except Exception as exc:
+                log.warning("AMP collector init failed for anomaly detector: %s", exc)
+
         anomaly = AnomalyDetector(
             self.config, self.k8s_client, node_metrics, node_diag,
             self.evidence_store, run_id, self._prompt_operator,
             aws_client=self.aws_client,
             kb_store=kb_store,
             kb_matcher=kb_matcher,
+            amp_collector=amp_collector,
+            shared_ctx=self._shared_ctx,
         )
         sweep_agent = HealthSweepAgent(self.config, self.k8s_client, node_diag, self.evidence_store, run_id)
         infra_agent = InfraHealthAgent(self.k8s_client)
@@ -421,6 +441,27 @@ class ScaleTestController:
             log.warning("Failed to create ObservabilityScanner: %s", exc)
             self._scanner = None
             self._scanner_task = None
+
+        # Create SharedContext when scanner exists, for cross-source correlation.
+        if self._scanner:
+            from k8s_scale_test.shared_context import SharedContext
+            self._shared_ctx = SharedContext(
+                max_age_seconds=self.config.event_time_window_minutes * 60,
+            )
+            anomaly.shared_ctx = self._shared_ctx
+
+        # Create FindingReviewer for independent re-verification of findings.
+        # Reuses the same amp_collector and cloudwatch_fn as the scanner.
+        try:
+            self._reviewer = FindingReviewer(
+                evidence_store=self.evidence_store,
+                run_id=run_id,
+                amp_collector=amp_collector,
+                cloudwatch_fn=cw_fn,
+            )
+        except Exception as exc:
+            log.warning("Failed to create FindingReviewer: %s", exc)
+            self._reviewer = None
 
         # ── Phase 7: Stressor Scaling + Hold at Peak ──────────────────
         # Scale pods, hold at target count, run health sweep. All protected
@@ -521,6 +562,11 @@ class ScaleTestController:
         # Generate the test run summary, cross-validate rate data against
         # the observer, produce the HTML chart, and optionally auto-ingest
         # resolved findings into the Known Issues KB.
+
+        # Await all pending finding review tasks before generating the summary.
+        if self._review_tasks:
+            await asyncio.gather(*self._review_tasks, return_exceptions=True)
+
         summary = self._make_summary(run_id, start, report, result)
         verification_issues = self._verify_run_data(run_id, result)
 
@@ -837,6 +883,9 @@ class ScaleTestController:
                 self._findings.append(finding)
                 if self._ctx_writer:
                     self._ctx_writer.append_finding_summary(finding)
+                if self._reviewer is not None:
+                    task = asyncio.create_task(self._safe_review(finding))
+                    self._review_tasks.append(task)
                 if finding.severity == Severity.CRITICAL:
                     await self._prompt_operator(
                         f"Critical finding at timeout", {"finding": finding.finding_id})
@@ -982,6 +1031,8 @@ class ScaleTestController:
             self._findings.append(finding)
             if self._ctx_writer:
                 self._ctx_writer.append_finding_summary(finding)
+            if self._reviewer is not None:
+                await self._safe_review(finding)
             if finding.k8s_events:
                 warnings = [e for e in finding.k8s_events if e.event_type == "Warning"]
                 if warnings:
@@ -1015,13 +1066,26 @@ class ScaleTestController:
             return "continue"
 
     def _on_scanner_finding(self, result: ScanResult) -> None:
-        """Handle a scanner finding: log, persist, collect."""
+        """Handle a scanner finding: log, persist, collect, share."""
         log.warning("Scanner [%s] %s: %s", result.query_name, result.severity.value, result.title)
         try:
             self.evidence_store.save_scanner_finding(self._evidence_run_id, result)
         except Exception as exc:
             log.debug("Failed to persist scanner finding: %s", exc)
         self._scanner_findings.append(result)
+        # Write to shared context for cross-source correlation
+        if self._shared_ctx is not None:
+            try:
+                self._shared_ctx.add(result)
+            except Exception as exc:
+                log.debug("Failed to write scanner finding to shared context: %s", exc)
+
+    async def _safe_review(self, finding: Finding) -> None:
+        """Run a finding review, catching all exceptions."""
+        try:
+            await self._reviewer.review(finding)
+        except Exception as exc:
+            log.warning("Finding review failed for %s: %s", finding.finding_id, exc)
 
     async def _count_pods(self) -> tuple[int, int, int]:
         """Return ``(ready, pending, total)`` pod counts.

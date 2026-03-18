@@ -6,11 +6,18 @@ find a root cause. The investigation is structured as a pipeline of
 layers, each adding more detail:
 
 Investigation layers (in order):
+    0. SharedContext — queries the shared in-memory context for scanner
+       findings that temporally overlap the alert. Matched findings are
+       referenced as prior evidence instead of re-collected.
     1. K8s Warning events — the cheapest signal; always collected first.
     2. Pod phase breakdown — distinguishes Pending (unschedulable) from
        ContainerCreating (scheduled but CNI/runtime issues).
     3. Stuck-pod nodes — identifies which nodes have Pending pods.
     4. Node conditions — K8s-reported problems (NotReady, MemoryPressure).
+    4.5. AMP metric query — queries AMP/Prometheus for node-level metrics
+         (CPU, memory, network errors, IPAMD, pod restarts) within a ±3 min
+         window around the alert timestamp. Only runs if an AMPMetricCollector
+         is configured.
     5. EC2 ENI/prefix state — checks VPC networking (IP exhaustion,
        IPAMD failures). Only runs if an AWS client is available.
     6. SSM node diagnostics — runs shell commands on problem nodes to
@@ -34,6 +41,7 @@ from typing import Callable, Awaitable, Optional
 
 from k8s_scale_test.diagnostics import NodeDiagnosticsCollector
 from k8s_scale_test.evidence import EvidenceStore
+from k8s_scale_test.health_sweep import NodeMetricResult, check_threshold
 from k8s_scale_test.kb_matcher import SignatureMatcher
 from k8s_scale_test.kb_store import KBStore
 from k8s_scale_test.metrics import NodeMetricsAnalyzer
@@ -41,6 +49,7 @@ from k8s_scale_test.models import (
     Alert, Finding, K8sEvent, NodeDiagnostic, NodeMetric,
     ProblemNode, Severity, TestConfig,
 )
+from k8s_scale_test.shared_context import match_findings
 from k8s_scale_test.tracing import span
 
 log = logging.getLogger(__name__)
@@ -71,6 +80,15 @@ class AnomalyDetector:
         Known-issues knowledge base for pattern matching.
     kb_matcher : SignatureMatcher, optional
         Matches current events against known KB entries.
+    amp_collector : AMPMetricCollector, optional
+        Pre-configured AMP/Prometheus metric collector for querying
+        node-level metrics during reactive investigations. When None,
+        the AMP investigation layer is skipped.
+    shared_ctx : SharedContext, optional
+        In-memory shared context for cross-source correlation. When
+        provided, the anomaly detector queries it for recent scanner
+        findings before starting the investigation pipeline. When None,
+        the SharedContext lookup is skipped entirely.
     """
 
     def __init__(
@@ -82,6 +100,8 @@ class AnomalyDetector:
         aws_client=None,
         kb_store: Optional[KBStore] = None,
         kb_matcher: Optional[SignatureMatcher] = None,
+        amp_collector=None,
+        shared_ctx=None,
     ) -> None:
         self.config = config
         self.k8s_client = k8s_client
@@ -93,14 +113,16 @@ class AnomalyDetector:
         self.aws_client = aws_client
         self.kb_store = kb_store
         self.kb_matcher = kb_matcher or SignatureMatcher(threshold=config.kb_match_threshold)
+        self.amp_collector = amp_collector
+        self.shared_ctx = shared_ctx
         self._node_cache: dict[str, str] = {}  # node_name -> instance_id
 
     async def handle_alert(self, alert: Alert) -> Finding:
         """Run the full investigation pipeline for a single alert.
 
         Collects evidence from all layers (K8s events → pod phases → stuck
-        nodes → node conditions → ENI state → SSM diagnostics), then
-        correlates everything into a Finding with a root cause (or None
+        nodes → node conditions → AMP metrics → ENI state → SSM diagnostics),
+        then correlates everything into a Finding with a root cause (or None
         if inconclusive).
 
         If a Known Issues KB is configured, checks for matching patterns
@@ -122,6 +144,19 @@ class AnomalyDetector:
 
         with span("alert/" + alert.alert_type.value,
                    alert_id=str(alert)) as alert_span:
+
+            # Layer 0: Fetch scanner findings from SharedContext (time-windowed)
+            scanner_matches_raw: list = []
+            if self.shared_ctx is not None:
+                try:
+                    with span("investigation/shared_context"):
+                        scanner_matches_raw = await self.shared_ctx.query(
+                            alert.timestamp,
+                            window_seconds=self.config.correlation_window_seconds,
+                        )
+                except Exception as exc:
+                    log.warning("SharedContext query failed, continuing without scanner findings: %s", exc)
+                    scanner_matches_raw = []
 
             # Layer 1: K8s events — the starting point for any investigation
             with span("investigation/k8s_events"):
@@ -177,6 +212,25 @@ class AnomalyDetector:
                 log.info("  Investigating %d nodes (%d stuck-pod, %d bad-condition)",
                          len(targets), len(stuck_nodes), len(condition_problems))
 
+            # Layer 0 continued: Match scanner findings against alert resources
+            scanner_matches: list = []
+            if scanner_matches_raw:
+                alert_resources: set[str] = set()
+                alert_resources.update(alert.context.get("namespaces", []))
+                alert_resources.update(n for n, _ in stuck_nodes)
+                alert_resources.update(e.involved_object_name for e in events)
+                scanner_matches = match_findings(scanner_matches_raw, alert, alert_resources)
+                if scanner_matches:
+                    log.info("  SharedContext: %d scanner matches (%d strong)",
+                             len(scanner_matches),
+                             sum(1 for _, _, m in scanner_matches if m == "strong"))
+
+            # Layer 4.5: AMP metrics (if configured)
+            amp_metrics: dict[str, list[NodeMetricResult]] = {}
+            if self.amp_collector is not None:
+                with span("investigation/amp_metrics"):
+                    amp_metrics = await self._collect_amp_metrics(alert.timestamp)
+
             # Layer 5: EC2 ENI/prefix state (if AWS client available)
             eni_evidence = {}
             if self.aws_client and targets:
@@ -195,7 +249,9 @@ class AnomalyDetector:
             # Correlate everything
             metrics = [pn.metrics for pn in condition_problems]
             finding = self._correlate(alert, events, metrics, diags,
-                                      stuck_nodes, eni_evidence, phase_breakdown)
+                                      stuck_nodes, eni_evidence, phase_breakdown,
+                                      amp_metrics=amp_metrics,
+                                      scanner_matches=scanner_matches)
             self.evidence_store.save_finding(self.run_id, finding)
 
             # Set root cause and severity on the parent alert span
@@ -275,6 +331,27 @@ class AnomalyDetector:
         except Exception as exc:
             log.error("Event collection failed: %s", exc)
         return result
+
+    async def _collect_amp_metrics(
+        self, alert_timestamp: datetime,
+    ) -> dict[str, list[NodeMetricResult]]:
+        """Query AMP for node-level metrics around the alert timestamp (±3 min).
+
+        Delegates to :pymethod:`AMPMetricCollector.collect_all` which runs
+        all PromQL queries concurrently.
+
+        Returns dict keyed by metric category (cpu, memory, network_errors,
+        ipamd, pod_restarts).  Returns empty dict if ``amp_collector`` is
+        ``None`` or all queries fail.
+        """
+        if self.amp_collector is None:
+            return {}
+        try:
+            return await self.amp_collector.collect_all()
+        except Exception as exc:
+            log.warning("AMP metric collection failed: %s", exc)
+            return {}
+
 
     async def _get_pod_phase_breakdown(self, namespaces):
         """Get pod phase counts from Deployment status objects (Layer 2).
@@ -512,7 +589,8 @@ class AnomalyDetector:
     # ------------------------------------------------------------------
 
     def _correlate(self, alert, events, metrics, diagnostics,
-                   stuck_nodes, eni_evidence, phase_breakdown):
+                   stuck_nodes, eni_evidence, phase_breakdown,
+                   amp_metrics=None, scanner_matches=None):
         """Combine all collected evidence into a single Finding.
 
         Builds an evidence_references list (human-readable summary strings),
@@ -535,6 +613,14 @@ class AnomalyDetector:
             Per-node ENI/prefix data.
         phase_breakdown : dict
             Pod phase counts.
+        amp_metrics : dict[str, list[NodeMetricResult]] | None
+            AMP metric results keyed by category. None when AMP is not
+            configured or collection failed.
+        scanner_matches : list[tuple[datetime, ScanResult, str]] | None
+            Matched scanner findings from SharedContext correlation.
+            Each tuple is (timestamp, ScanResult, match_type) where
+            match_type is "strong" or "weak". None when SharedContext
+            is not configured or query returned no matches.
 
         Returns
         -------
@@ -575,12 +661,38 @@ class AnomalyDetector:
         if proactive_clues:
             evidence_refs.append(f"node_health:{len(proactive_clues)}_issues")
 
+        # AMP metric evidence
+        if amp_metrics:
+            amp_issues = []
+            for category, results in amp_metrics.items():
+                for r in results:
+                    issue = check_threshold(r)
+                    if issue:
+                        amp_issues.append(issue)
+            if amp_issues:
+                evidence_refs.append(f"amp:{len(amp_issues)}_violations")
+            else:
+                evidence_refs.append(
+                    f"amp:checked={sum(len(v) for v in amp_metrics.values())},no_violations"
+                )
+        elif self.amp_collector is not None:
+            evidence_refs.append("amp:no_data")
+
+        # Scanner correlation evidence
+        if scanner_matches:
+            strong = [m for m in scanner_matches if m[2] == "strong"]
+            weak = [m for m in scanner_matches if m[2] == "weak"]
+            evidence_refs.append(f"scanner_correlation:{len(strong)}_strong,{len(weak)}_weak")
+            for ts, result, match_type in scanner_matches[:5]:
+                evidence_refs.append(f"scanner:{result.query_name}({match_type})")
+
         # Determine severity from evidence weight
         severity = self._assess_severity(warnings, stuck_nodes, eni_evidence)
 
         # Extract root cause from all evidence
         root_cause = self._extract_root_cause(
-            warning_reasons, eni_evidence, diagnostics, phase_breakdown)
+            warning_reasons, eni_evidence, diagnostics, phase_breakdown,
+            amp_metrics=amp_metrics, scanner_matches=scanner_matches)
 
         affected = list({e.involved_object_name for e in events})[:20]
         affected.extend(n for n, _ in stuck_nodes[:10])
@@ -629,7 +741,8 @@ class AnomalyDetector:
         return Severity.INFO
 
     def _extract_root_cause(self, warning_reasons, eni_evidence,
-                            diagnostics, phase_breakdown):
+                            diagnostics, phase_breakdown,
+                            amp_metrics=None, scanner_matches=None):
         """Scan all collected evidence for root cause patterns.
 
         Checks evidence in priority order (most common scale-test failures first):
@@ -639,6 +752,10 @@ class AnomalyDetector:
         4. SSM log patterns (IPAMD empty datastore, API throttling, OOM)
         5. Proactive node health (PSI, kubelet, disk, CPU saturation)
         6. Phase-based clues (large Pending or ContainerCreating counts)
+        7. AMP metric evidence (CPU > 90%, memory > 90%, network errors,
+           pod restarts > 5)
+        8. Scanner correlation clues (WARNING/CRITICAL scanner findings
+           pre-detected by the ObservabilityScanner)
 
         Returns None if no pattern matches — the finding is "unresolved"
         and the operator is notified.
@@ -653,6 +770,13 @@ class AnomalyDetector:
             SSM command outputs.
         phase_breakdown : dict
             Pod phase counts.
+        amp_metrics : dict[str, list[NodeMetricResult]] | None
+            AMP metric results keyed by category. None when AMP is not
+            configured or collection failed.
+        scanner_matches : list[tuple[datetime, ScanResult, str]] | None
+            Matched scanner findings from SharedContext correlation.
+            WARNING/CRITICAL findings are added as "Scanner pre-detected:"
+            clues. None when SharedContext is not configured.
 
         Returns
         -------
@@ -752,6 +876,25 @@ class AnomalyDetector:
                 clues.append(f"{pending} pods unschedulable")
             if creating > 100 and pending == 0:
                 clues.append(f"{creating} pods stuck in ContainerCreating")
+
+        # --- AMP metric evidence ---
+        if amp_metrics:
+            for category, results in amp_metrics.items():
+                for r in results:
+                    if category == "cpu" and r.value > 90:
+                        clues.append(f"AMP: CPU {r.value:.1f}% on {r.node_name}")
+                    elif category == "memory" and r.value > 90:
+                        clues.append(f"AMP: Memory {r.value:.1f}% on {r.node_name}")
+                    elif category == "network_errors" and r.value > 0:
+                        clues.append(f"AMP: Network errors {r.value:.1f}/s on {r.node_name}")
+                    elif category == "pod_restarts" and r.value > 5:
+                        clues.append(f"AMP: {r.value:.0f} pod restarts on {r.node_name}")
+
+        # --- Scanner correlation clues (WARNING/CRITICAL findings only) ---
+        if scanner_matches:
+            for ts, result, match_type in scanner_matches:
+                if result.severity.value in ("warning", "critical"):
+                    clues.append(f"Scanner pre-detected: {result.title}")
 
         if not clues:
             return None

@@ -168,6 +168,7 @@ class TestConfig(_SerializableMixin):
     kb_s3_prefix: str = "kb-entries/"
     kb_match_threshold: float = 0.7
     kb_auto_ingest: bool = True
+    correlation_window_seconds: float = 120.0
     enable_tracing: bool = True
 
 

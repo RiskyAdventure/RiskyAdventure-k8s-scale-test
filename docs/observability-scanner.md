@@ -157,7 +157,19 @@ Findings are:
 - Logged at WARNING level as they occur
 - Persisted to `scanner_findings.jsonl` in the evidence store
 - Collected in `self._scanner_findings` (separate from anomaly findings)
+- Written to the in-memory SharedContext for cross-source correlation with the anomaly detector
 - Included in the `TestRunSummary` under `scanner_findings`
+
+## Cross-Source Correlation
+
+Scanner findings are shared with the anomaly detector via an in-memory `SharedContext` (`shared_context.py`). When the scanner produces a finding, the controller writes it to the SharedContext. When an alert triggers investigation, the anomaly detector queries the SharedContext for temporally relevant scanner findings (within ±120s by default).
+
+If a scanner finding matches the alert's symptoms (same time window, overlapping affected nodes), the anomaly detector references it as prior evidence instead of re-investigating. Matches are classified as:
+
+- **Strong**: Temporal overlap AND resource overlap (scanner found issues on the same nodes)
+- **Weak**: Temporal overlap only (scanner found issues but on different or unknown nodes)
+
+This avoids redundant investigation when the scanner already identified the cause. For example, if the scanner detects CPU pressure proactively and a rate drop fires 30 seconds later, the anomaly detector sees the scanner finding and references it rather than re-querying AMP.
 
 ## Graceful Degradation
 
