@@ -27,51 +27,37 @@ _region: str = "us-west-2"
 
 
 def _verify_xray(aws_session, region: str) -> bool:
-    """Send a test segment via PutTraceSegments and verify it's queryable.
+    """Verify that X-Ray trace storage is working.
 
-    Returns True if X-Ray is storing traces, False otherwise.
+    Checks the trace segment destination. When Transaction Search is
+    enabled (destination=CloudWatchLogs), traces go to the
+    ``/aws/application-signals/data`` log group — not the legacy X-Ray
+    segment store. The legacy ``BatchGetTraces`` API won't find them.
+
+    Returns True if the destination is configured and reachable.
     """
-    import json, random, time
     try:
         xray = aws_session.client("xray", region_name=region)
-        now = int(time.time())
-        now_hex = hex(now)[2:]
-        rand_hex = "".join(random.choices("0123456789abcdef", k=24))
-        trace_id = f"1-{now_hex}-{rand_hex}"
-        segment_id = "".join(random.choices("0123456789abcdef", k=16))
-        segment = {
-            "name": "k8s-scale-test-verify",
-            "id": segment_id,
-            "trace_id": trace_id,
-            "start_time": time.time() - 0.5,
-            "end_time": time.time(),
-            "in_progress": False,
-            "annotations": {"verify": "true"},
-        }
-        resp = xray.put_trace_segments(TraceSegmentDocuments=[json.dumps(segment)])
-        unprocessed = resp.get("UnprocessedTraceSegments", [])
-        if unprocessed:
-            log.warning("X-Ray rejected verify segment: %s", unprocessed)
-            return False
-        # Wait for indexing then query
-        time.sleep(5)
-        get_resp = xray.batch_get_traces(TraceIds=[trace_id])
-        traces = get_resp.get("Traces", [])
-        if traces:
-            log.info("X-Ray verify: trace %s stored and queryable", trace_id)
+        dest_resp = xray.get_trace_segment_destination()
+        destination = dest_resp.get("Destination", "Unknown")
+        status = dest_resp.get("Status", "Unknown")
+
+        if destination == "CloudWatchLogs" and status == "ACTIVE":
+            log.info(
+                "X-Ray verify: Transaction Search enabled "
+                "(destination=CloudWatchLogs, status=ACTIVE). "
+                "Traces go to /aws/application-signals/data log group."
+            )
             return True
-        # Retry once after longer wait
-        time.sleep(10)
-        get_resp = xray.batch_get_traces(TraceIds=[trace_id])
-        traces = get_resp.get("Traces", [])
-        if traces:
-            log.info("X-Ray verify: trace %s stored (slow indexing)", trace_id)
+
+        if destination == "XRay" and status == "ACTIVE":
+            log.info("X-Ray verify: legacy X-Ray segment store active")
             return True
+
         log.warning(
-            "X-Ray verify FAILED: PutTraceSegments accepted trace %s "
-            "but BatchGetTraces returned empty after 15s. "
-            "X-Ray may not be storing traces in this account/region.",
-            trace_id,
+            "X-Ray verify: unexpected destination=%s status=%s. "
+            "Traces may not be stored correctly.",
+            destination, status,
         )
         return False
     except Exception as exc:
@@ -187,7 +173,12 @@ def shutdown(timeout: float = 10.0) -> None:
 
 
 def get_trace_url(run_id: str) -> str:
-    """Return the CloudWatch X-Ray console deep-link for *run_id*.
+    """Return the CloudWatch Transaction Search console deep-link for *run_id*.
+
+    When Transaction Search is enabled, traces are stored in CloudWatch
+    Logs (``/aws/application-signals/data``), not the legacy X-Ray
+    segment store. The URL points to the Transaction Search console
+    which can query both backends.
 
     Works regardless of whether tracing is enabled — always returns a
     valid URL string.
