@@ -48,9 +48,6 @@ def init_tracing(aws_session, service_name: str = "k8s-scale-test") -> bool:
         from opentelemetry import trace
         from opentelemetry.sdk.trace import TracerProvider
         from opentelemetry.sdk.trace.export import BatchSpanProcessor
-        from opentelemetry.exporter.otlp.proto.http.trace_exporter import (
-            OTLPSpanExporter,
-        )
         from opentelemetry.sdk.extension.aws.trace import (
             AwsXRayIdGenerator,
         )
@@ -64,34 +61,22 @@ def init_tracing(aws_session, service_name: str = "k8s-scale-test") -> bool:
         # --- Region -----------------------------------------------------------
         _region = aws_session.region_name or "us-west-2"
 
-        # --- SigV4 auth via OTLP exporter ------------------------------------
-        # The ADOT OTLP exporter supports SigV4 natively when the
-        # ``OTEL_EXPORTER_OTLP_TRACES_HEADERS`` env-var is absent and
-        # credentials are available in the environment.  We inject the
-        # credentials from the boto3 session so the exporter can sign
-        # requests.
-        credentials = aws_session.get_credentials()
-        if credentials is None:
-            log.warning("No AWS credentials available — cannot init tracing")
-            return False
-        frozen = credentials.get_frozen_credentials()
-
-        # Build the auth header dict for SigV4 signing.
-        # The OTLPSpanExporter with the ADOT distro picks up SigV4 from
-        # environment variables.
-        import os
-
-        os.environ.setdefault("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT",
-                              f"https://xray.{_region}.amazonaws.com/v1/traces")
-        os.environ["AWS_ACCESS_KEY_ID"] = frozen.access_key
-        os.environ["AWS_SECRET_ACCESS_KEY"] = frozen.secret_key
-        if frozen.token:
-            os.environ["AWS_SESSION_TOKEN"] = frozen.token
-        os.environ.setdefault("AWS_DEFAULT_REGION", _region)
+        # --- SigV4-aware exporter via ADOT distro ----------------------------
+        # The standard OTLPSpanExporter does NOT sign requests. The X-Ray
+        # OTLP endpoint requires SigV4. The ADOT distro provides
+        # OTLPAwsSpanExporter which handles SigV4 signing internally
+        # using the boto3 session credentials.
+        from amazon.opentelemetry.distro.exporter.otlp.aws.traces.otlp_aws_span_exporter import (
+            OTLPAwsSpanExporter,
+        )
 
         endpoint = f"https://xray.{_region}.amazonaws.com/v1/traces"
 
-        exporter = OTLPSpanExporter(endpoint=endpoint)
+        exporter = OTLPAwsSpanExporter(
+            session=aws_session,
+            endpoint=endpoint,
+            aws_region=_region,
+        )
 
         # --- TracerProvider ---------------------------------------------------
         id_generator = AwsXRayIdGenerator()
