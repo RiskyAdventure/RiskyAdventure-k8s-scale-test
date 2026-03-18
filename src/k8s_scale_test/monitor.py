@@ -445,6 +445,12 @@ class PodRateMonitor:
 
                 # Always write data points — mark hold points instead of suppressing them.
                 # This ensures rate_data.jsonl has no invisible timestamp gaps.
+                # Skip pre-scaling points where no pods exist yet (Flux push/reconcile time).
+                if total == 0 and ready == 0 and pending == 0:
+                    prev_ready, prev_time = ready, now
+                    _time.sleep(self._TICK_INTERVAL)
+                    continue
+
                 dp = RateDataPoint(timestamp=now, ready_count=ready, delta_ready=ready-prev_ready,
                     ready_rate=rate, rolling_avg_rate=ra, pending_count=pending, total_pods=total,
                     interval_seconds=elapsed, is_gap=is_gap, is_hold=is_hold)
