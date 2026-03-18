@@ -18,6 +18,7 @@ These principles apply to every task. Read them before starting work.
 - Fully understand the context of any code you change before changing it. Read the callers, the tests, the logs, the config.
 - If there is confusion or ambiguity, ask for clarification rather than guessing.
 - Don't remove things just because you don't understand what they do. If something looks unused or wrong, verify before deleting.
+- check source code or on-line documentation to verify if unsure
 
 ## Communication
 
