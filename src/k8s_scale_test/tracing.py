@@ -26,18 +26,76 @@ _provider = None  # opentelemetry.sdk.trace.TracerProvider | None
 _region: str = "us-west-2"
 
 
+def _verify_xray(aws_session, region: str) -> bool:
+    """Send a test segment via PutTraceSegments and verify it's queryable.
+
+    Returns True if X-Ray is storing traces, False otherwise.
+    """
+    import json, random, time
+    try:
+        xray = aws_session.client("xray", region_name=region)
+        now = int(time.time())
+        now_hex = hex(now)[2:]
+        rand_hex = "".join(random.choices("0123456789abcdef", k=24))
+        trace_id = f"1-{now_hex}-{rand_hex}"
+        segment_id = "".join(random.choices("0123456789abcdef", k=16))
+        segment = {
+            "name": "k8s-scale-test-verify",
+            "id": segment_id,
+            "trace_id": trace_id,
+            "start_time": time.time() - 0.5,
+            "end_time": time.time(),
+            "in_progress": False,
+            "annotations": {"verify": "true"},
+        }
+        resp = xray.put_trace_segments(TraceSegmentDocuments=[json.dumps(segment)])
+        unprocessed = resp.get("UnprocessedTraceSegments", [])
+        if unprocessed:
+            log.warning("X-Ray rejected verify segment: %s", unprocessed)
+            return False
+        # Wait for indexing then query
+        time.sleep(5)
+        get_resp = xray.batch_get_traces(TraceIds=[trace_id])
+        traces = get_resp.get("Traces", [])
+        if traces:
+            log.info("X-Ray verify: trace %s stored and queryable", trace_id)
+            return True
+        # Retry once after longer wait
+        time.sleep(10)
+        get_resp = xray.batch_get_traces(TraceIds=[trace_id])
+        traces = get_resp.get("Traces", [])
+        if traces:
+            log.info("X-Ray verify: trace %s stored (slow indexing)", trace_id)
+            return True
+        log.warning(
+            "X-Ray verify FAILED: PutTraceSegments accepted trace %s "
+            "but BatchGetTraces returned empty after 15s. "
+            "X-Ray may not be storing traces in this account/region.",
+            trace_id,
+        )
+        return False
+    except Exception as exc:
+        log.warning("X-Ray verify failed: %s", exc)
+        return False
+
+
 def init_tracing(aws_session, service_name: str = "k8s-scale-test") -> bool:
     """Initialise the OpenTelemetry SDK with OTLP/HTTP export to X-Ray.
 
     Steps
     -----
     1. Resolve the AWS region from the boto3 session.
-    2. Build SigV4 auth headers via the session credentials.
-    3. Create an ``OTLPSpanExporter`` pointed at the X-Ray OTLP endpoint.
-    4. Create a ``TracerProvider`` with ``BatchSpanProcessor`` and the
+    2. Verify X-Ray is actually storing traces (smoke test).
+    3. Build SigV4 auth headers via the session credentials.
+    4. Create an ``OTLPSpanExporter`` pointed at the X-Ray OTLP endpoint.
+    5. Create a ``TracerProvider`` with ``BatchSpanProcessor`` and the
        AWS X-Ray ID generator (``AwsXRayIdGenerator``).
-    5. Instrument ``threading`` for automatic context propagation.
-    6. Instrument ``botocore`` for automatic AWS API call spans.
+    6. Instrument ``threading`` for automatic context propagation.
+    7. Instrument ``botocore`` for automatic AWS API call spans.
+
+    If X-Ray verification fails, tracing still initialises but a
+    prominent warning is logged so the operator knows traces won't
+    appear in the console.
 
     Returns ``True`` on success, ``False`` on any failure (tracing
     becomes a no-op for the rest of the process).
@@ -60,6 +118,17 @@ def init_tracing(aws_session, service_name: str = "k8s-scale-test") -> bool:
 
         # --- Region -----------------------------------------------------------
         _region = aws_session.region_name or "us-west-2"
+
+        # --- Verify X-Ray is working -----------------------------------------
+        xray_ok = _verify_xray(aws_session, _region)
+        if not xray_ok:
+            log.warning(
+                "X-Ray trace storage verification failed in %s. "
+                "Tracing will still be enabled but traces may not "
+                "appear in the X-Ray console. Check account/region "
+                "X-Ray configuration.",
+                _region,
+            )
 
         # --- SigV4-aware exporter via ADOT distro ----------------------------
         # The standard OTLPSpanExporter does NOT sign requests. The X-Ray
