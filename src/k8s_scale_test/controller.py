@@ -301,22 +301,16 @@ class ScaleTestController:
         if not stressors:
             log.warning("No stressor deployments found after filtering")
 
-        # 3c. Scale iperf3 servers first (Task 9.3)
+        # 3c. Scale infrastructure and stressors together (single git push)
+        # iperf3 clients have a readiness probe that checks server connectivity,
+        # so they won't report Ready until servers are reachable. No need to
+        # stage the deployment.
         if infra:
             server_count = max(1, self.config.target_pods // self.config.iperf3_server_ratio)
             infra_targets = [(d.name, server_count, d.source_path) for d in infra]
             writer.set_replicas_batch(infra_targets)
             log.info("Scaling %d infrastructure deployments to %d replicas each",
                      len(infra), server_count)
-            await self._git_commit_push("scale-test: deploy iperf3 servers")
-            # Wait for servers to be ready before scaling stressors
-            log.info("Waiting for infrastructure pods to be ready...")
-            for _ in range(60):  # up to 5 minutes
-                ready, pending, _ = await self._count_pods()
-                if ready >= server_count * len(infra):
-                    break
-                await asyncio.sleep(5)
-            log.info("Infrastructure pods ready, proceeding with stressor scaling")
 
         # 3d. Weighted or even distribution for stressors (Task 9.4)
         if self.config.stressor_weights and stressors:
