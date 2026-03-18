@@ -530,6 +530,38 @@ class AnomalyDetector:
         if warning_reasons.get("FailedCreatePodSandBox", 0) > 0 or zero_pfx:
             extra["ipamd_log"] = "tail -200 /var/log/aws-routed-eni/ipamd.log 2>/dev/null || echo NO_IPAMD_LOG"
             extra["cni_config"] = "cat /etc/cni/net.d/* 2>/dev/null | head -50"
+            # Count network interfaces — high counts (>200) correlate with
+            # netlink dump interruption during MAC generation
+            extra["iface_count"] = (
+                "echo IFACE_COUNT=$(ip link show | grep -c '^[0-9]'); "
+                "echo VETH_COUNT=$(ip link show type veth | grep -c '^[0-9]'); "
+                "ip link show type veth 2>/dev/null | head -40"
+            )
+            # BPF trace for kernel-level netlink/veth diagnostics.
+            # Runs for 30s capturing register_netdevice rate, netlink_dump
+            # timing, and veth_newlink calls. Only runs if bpftrace is
+            # installed (pre-loaded via EC2NodeClass userData).
+            # Output is JSON on stdout, histogram on stderr.
+            extra["bpf_netlink_trace"] = (
+                "if command -v bpftrace >/dev/null 2>&1; then "
+                "timeout 35 bpftrace -e '"
+                "BEGIN { @start=nsecs; @ev=0; printf(\"{\\\"events\\\":[\"); } "
+                "kprobe:register_netdevice { @reg=count(); @reg_s=count(); } "
+                "kprobe:unregister_netdevice { @unreg=count(); } "
+                "kprobe:veth_newlink { @vnl=count(); @vnl_s=count(); } "
+                "kprobe:netlink_dump { @dstart[tid]=nsecs; @dcnt=count(); } "
+                "kretprobe:netlink_dump { $s=@dstart[tid]; if($s>0){@dhist=hist((nsecs-$s)/1000);delete(@dstart[tid]);} } "
+                "kprobe:rtnl_dump_ifinfo { @ldump=count(); } "
+                "interval:s:1 { $e=(nsecs-@start)/1000000000; if(@ev>0){printf(\",\");} "
+                "printf(\"{\\\"t\\\":%lld,\\\"reg\\\":%lld,\\\"vnl\\\":%lld}\",$e,@reg_s,@vnl_s); "
+                "@ev++; clear(@reg_s); clear(@vnl_s); } "
+                "interval:s:30 { printf(\"],\\\"summary\\\":{\\\"register_netdevice\\\":%lld,"
+                "\\\"unregister_netdevice\\\":%lld,\\\"veth_newlink\\\":%lld,"
+                "\\\"netlink_dumps\\\":%lld,\\\"rtnl_dump_ifinfo\\\":%lld}}\","
+                "@reg,@unreg,@vnl,@dcnt,@ldump); exit(); } "
+                "END { clear(@dstart); clear(@start); clear(@ev); }' 2>/dev/null; "
+                "else echo NO_BPFTRACE; fi"
+            )
 
         # --- Disk / image checks ---
         # "Failed" and "ErrImagePull" suggest container image pull failures,

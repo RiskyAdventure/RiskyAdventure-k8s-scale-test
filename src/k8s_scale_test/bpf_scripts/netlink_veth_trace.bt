@@ -1,0 +1,149 @@
+/*
+ * netlink_veth_trace.bt — BPF trace for VPC CNI MAC collision root cause analysis
+ *
+ * Captures kernel-level evidence of netlink dump interruptions during
+ * concurrent veth pair creation. Designed to run for 30 seconds on a node
+ * experiencing FailedCreatePodSandBox events.
+ *
+ * What this traces:
+ *   1. register_netdevice — every new network interface (veth creation)
+ *   2. unregister_netdevice — interface removal (veth teardown)
+ *   3. netlink_dump — netlink dump operations (LinkList() calls)
+ *   4. rtnl_dump_ifinfo — RTM_GETLINK dump handler (where dev_base_seq is read)
+ *   5. veth_newlink — veth-specific creation (confirms veth vs other interfaces)
+ *
+ * If our hypothesis is correct (netlink dump interruption under concurrency):
+ *   - High register_netdevice rate during the collision window
+ *   - netlink_dump durations long enough for dev_base_seq to change mid-dump
+ *   - Correlation between veth creation bursts and dump timing
+ *
+ * If our hypothesis is wrong, this data helps find the real cause:
+ *   - Low register_netdevice rate → concurrency isn't the issue
+ *   - Short dump durations with no overlap → dumps complete atomically
+ *   - veth_newlink errors → kernel-level veth creation failure
+ *
+ * Usage: bpftrace /path/to/netlink_veth_trace.bt
+ * Duration: 30 seconds (hardcoded interval timer)
+ * Output: JSON-formatted summary to stdout
+ *
+ * Kernel requirement: 5.15+ (tested on 6.12 AL2023 EKS)
+ */
+
+BEGIN
+{
+    printf("{\"trace_start\": \"%s\", ", strftime("%Y-%m-%dT%H:%M:%S%z", nsecs));
+    printf("\"probe\": \"netlink_veth_trace\", ");
+    printf("\"duration_seconds\": 30, ");
+    printf("\"events\": [\n");
+    @start = nsecs;
+    @event_count = 0;
+}
+
+/*
+ * Probe 1: register_netdevice — fires on every new network interface.
+ * Each veth pair creation triggers this twice (host side + container side).
+ * High rate here during pod creation confirms concurrent veth churn.
+ */
+kprobe:register_netdevice
+{
+    @veth_creates = count();
+    @veth_creates_per_sec = count();
+}
+
+/*
+ * Probe 2: unregister_netdevice — fires on interface removal.
+ * Veth teardown during pod deletion also increments dev_base_seq,
+ * contributing to dump interruption.
+ */
+kprobe:unregister_netdevice
+{
+    @veth_deletes = count();
+}
+
+/*
+ * Probe 3: netlink_dump — the function that processes RTM_GETLINK dumps.
+ * This is what LinkList() triggers in the kernel. We track entry/exit
+ * to measure dump duration and detect if dumps are taking long enough
+ * for concurrent veth operations to interrupt them.
+ */
+kprobe:netlink_dump
+{
+    @dump_start[tid] = nsecs;
+    @dump_count = count();
+}
+
+kretprobe:netlink_dump
+{
+    $start = @dump_start[tid];
+    if ($start > 0) {
+        $duration_us = (nsecs - $start) / 1000;
+        @dump_duration_us = hist($duration_us);
+        delete(@dump_start[tid]);
+    }
+}
+
+/*
+ * Probe 4: rtnl_dump_ifinfo — the RTM_GETLINK dump handler.
+ * This is where cb->seq = tgt_net->dev_base_seq is set and
+ * nl_dump_check_consistent is called (inline). Each call processes
+ * one page of the interface list dump.
+ */
+kprobe:rtnl_dump_ifinfo
+{
+    @link_dumps = count();
+}
+
+/*
+ * Probe 5: veth_newlink — the veth-specific creation function.
+ * More specific than register_netdevice (which fires for all interface types).
+ * Confirms the interfaces being created are actually veth pairs.
+ */
+kprobe:veth_newlink
+{
+    @veth_newlink = count();
+    @veth_newlink_per_sec = count();
+}
+
+/*
+ * 1-second interval: print per-second rates for time-series analysis.
+ * This lets us correlate veth creation rate with dump timing.
+ */
+interval:s:1
+{
+    $elapsed = (nsecs - @start) / 1000000000;
+    if (@event_count > 0) {
+        printf(",\n");
+    }
+    printf("  {\"t\": %lld, \"veth_creates_s\": %lld, \"veth_newlink_s\": %lld}",
+        $elapsed,
+        @veth_creates_per_sec,
+        @veth_newlink_per_sec);
+    @event_count++;
+    clear(@veth_creates_per_sec);
+    clear(@veth_newlink_per_sec);
+}
+
+/*
+ * End after 30 seconds: print summary and histogram.
+ */
+interval:s:30
+{
+    printf("\n],\n");
+    printf("\"summary\": {\n");
+    printf("  \"total_register_netdevice\": %lld,\n", @veth_creates);
+    printf("  \"total_unregister_netdevice\": %lld,\n", @veth_deletes);
+    printf("  \"total_veth_newlink\": %lld,\n", @veth_newlink);
+    printf("  \"total_netlink_dumps\": %lld,\n", @dump_count);
+    printf("  \"total_rtnl_dump_ifinfo\": %lld\n", @link_dumps);
+    printf("},\n");
+    printf("\"dump_duration_us_histogram\": \"see_stderr\",\n");
+    printf("\"trace_end\": \"%s\"}\n", strftime("%Y-%m-%dT%H:%M:%S%z", nsecs));
+    exit();
+}
+
+END
+{
+    clear(@dump_start);
+    clear(@start);
+    clear(@event_count);
+}
