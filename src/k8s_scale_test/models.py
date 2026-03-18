@@ -168,7 +168,7 @@ class TestConfig(_SerializableMixin):
     kb_s3_prefix: str = "kb-entries/"
     kb_match_threshold: float = 0.7
     kb_auto_ingest: bool = True
-    enable_tracing: bool = False
+    enable_tracing: bool = True
 
 
 # ---------------------------------------------------------------------------
@@ -306,6 +306,7 @@ class RateDataPoint(_SerializableMixin):
     total_pods: int
     interval_seconds: float = 0.0  # actual seconds since last data point
     is_gap: bool = False           # True if interval > 2× expected (data was stale)
+    is_hold: bool = False          # True if ready is stable with no pending pods
 
 
 @dataclass

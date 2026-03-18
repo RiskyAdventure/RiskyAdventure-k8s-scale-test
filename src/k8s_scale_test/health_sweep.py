@@ -46,6 +46,7 @@ from dataclasses import dataclass
 from k8s_scale_test.diagnostics import NodeDiagnosticsCollector
 from k8s_scale_test.evidence import EvidenceStore
 from k8s_scale_test.models import TestConfig
+from k8s_scale_test.tracing import span
 
 log = logging.getLogger(__name__)
 
@@ -142,11 +143,12 @@ class K8sConditionChecker:
         Returns an empty list on K8s API failure (logs error, does not raise).
         """
         try:
-            loop = asyncio.get_event_loop()
-            v1 = self.k8s_client.CoreV1Api()
-            nodes = await loop.run_in_executor(
-                None, lambda: v1.list_node(watch=False)
-            )
+            with span("k8s/list_nodes"):
+                loop = asyncio.get_event_loop()
+                v1 = self.k8s_client.CoreV1Api()
+                nodes = await loop.run_in_executor(
+                    None, lambda: v1.list_node(watch=False)
+                )
         except Exception as exc:
             log.error("K8s API node condition query failed: %s", exc)
             return []
@@ -285,37 +287,38 @@ class AMPMetricCollector:
         Retries once on HTTP 403 after forcing a credential refresh, which
         handles SSO/STS token expiry during long-running tests.
         """
-        # Use quote() not quote_plus() so spaces become %20, not +.
-        # AMP's server-side SigV4 verification normalises to %20, so if
-        # we sign with + the canonical query strings diverge → 403.
-        params = urllib.parse.urlencode(
-            {"query": query}, quote_via=urllib.parse.quote,
-        )
-        url = f"{self._endpoint}?{params}"
+        with span("promql/query", source="amp_collector", query=query):
+            # Use quote() not quote_plus() so spaces become %20, not +.
+            # AMP's server-side SigV4 verification normalises to %20, so if
+            # we sign with + the canonical query strings diverge → 403.
+            params = urllib.parse.urlencode(
+                {"query": query}, quote_via=urllib.parse.quote,
+            )
+            url = f"{self._endpoint}?{params}"
 
-        for attempt in range(2):
-            req = urllib.request.Request(url, method="GET")
-            req.add_header("Accept", "application/json")
+            for attempt in range(2):
+                req = urllib.request.Request(url, method="GET")
+                req.add_header("Accept", "application/json")
 
-            if self._use_sigv4:
-                self._sign_request(req, url)
+                if self._use_sigv4:
+                    self._sign_request(req, url)
 
-            try:
-                loop = asyncio.get_event_loop()
-                response_body: bytes = await loop.run_in_executor(None, self._do_http, req)
-                return json.loads(response_body)
-            except urllib.error.HTTPError as e:
-                if e.code == 403 and attempt == 0 and self._boto3_session:
-                    log.warning("AMP query got 403 (possible sig mismatch or credential expiry), retrying with fresh session")
-                    # Force boto3 to re-resolve credentials (handles SSO expiry)
-                    import boto3
-                    session_kwargs = {}
-                    if self._boto3_session.profile_name:
-                        session_kwargs["profile_name"] = self._boto3_session.profile_name
-                    self._boto3_session = boto3.Session(**session_kwargs)
-                    self._credentials = self._boto3_session._session.get_credentials()
-                    continue
-                raise
+                try:
+                    loop = asyncio.get_event_loop()
+                    response_body: bytes = await loop.run_in_executor(None, self._do_http, req)
+                    return json.loads(response_body)
+                except urllib.error.HTTPError as e:
+                    if e.code == 403 and attempt == 0 and self._boto3_session:
+                        log.warning("AMP query got 403 (possible sig mismatch or credential expiry), retrying with fresh session")
+                        # Force boto3 to re-resolve credentials (handles SSO expiry)
+                        import boto3
+                        session_kwargs = {}
+                        if self._boto3_session.profile_name:
+                            session_kwargs["profile_name"] = self._boto3_session.profile_name
+                        self._boto3_session = boto3.Session(**session_kwargs)
+                        self._credentials = self._boto3_session._session.get_credentials()
+                        continue
+                    raise
 
     def _sign_request(self, req: urllib.request.Request, url: str) -> None:
         """Apply SigV4 signature headers to *req*.

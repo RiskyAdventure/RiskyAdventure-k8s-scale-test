@@ -52,8 +52,9 @@ def _add_run_args(p: argparse.ArgumentParser) -> None:
                    help="CloudWatch log group for node logs")
     p.add_argument("--eks-cluster-name", type=str, default=None,
                    help="EKS cluster name for EKS MCP server")
-    p.add_argument("--enable-tracing", action="store_true",
-                   help="Enable OpenTelemetry tracing (exports to X-Ray)")
+    p.add_argument("--enable-tracing", action=argparse.BooleanOptionalAction,
+                   default=True,
+                   help="Enable OpenTelemetry tracing (exports to X-Ray, default: on)")
 
 
 def _add_kb_subcommands(subparsers: argparse._SubParsersAction) -> None:

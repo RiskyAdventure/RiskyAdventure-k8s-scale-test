@@ -396,8 +396,9 @@ class PodRateMonitor:
            thread reconnected and did a bulk re-list. Gap intervals are excluded
            from the rolling average to avoid distorting the rate.
         4. Detects "hold" — when pending == 0 and ready is stable, meaning
-           we've reached the target. Hold data points are not recorded because
-           they add noise (rate is 0 but that's expected, not an anomaly).
+           we've reached the target. Hold data points are still recorded
+           (marked with is_hold=True) but excluded from the rolling average
+           window to avoid distorting the rate.
         5. Updates the rolling average window (drops points older than
            ``config.rolling_avg_window_seconds``).
         6. Fires alerts when:
@@ -436,17 +437,19 @@ class PodRateMonitor:
                 if not is_gap and not is_hold:
                     self._window.append(RateDataPoint(timestamp=now, ready_count=ready,
                         delta_ready=ready-prev_ready, ready_rate=rate, rolling_avg_rate=0.0,
-                        pending_count=pending, total_pods=total, interval_seconds=elapsed, is_gap=False))
+                        pending_count=pending, total_pods=total, interval_seconds=elapsed,
+                        is_gap=False, is_hold=False))
                 cutoff = now.timestamp() - self.config.rolling_avg_window_seconds
                 while self._window and self._window[0].timestamp.timestamp() < cutoff: self._window.popleft()
                 ra = self._rolling_average()
 
-                if not is_hold:
-                    dp = RateDataPoint(timestamp=now, ready_count=ready, delta_ready=ready-prev_ready,
-                        ready_rate=rate, rolling_avg_rate=ra, pending_count=pending, total_pods=total,
-                        interval_seconds=elapsed, is_gap=is_gap)
-                    self._time_series.append(dp)
-                    self.evidence_store.append_rate_datapoint(self.run_id, dp)
+                # Always write data points — mark hold points instead of suppressing them.
+                # This ensures rate_data.jsonl has no invisible timestamp gaps.
+                dp = RateDataPoint(timestamp=now, ready_count=ready, delta_ready=ready-prev_ready,
+                    ready_rate=rate, rolling_avg_rate=ra, pending_count=pending, total_pods=total,
+                    interval_seconds=elapsed, is_gap=is_gap, is_hold=is_hold)
+                self._time_series.append(dp)
+                self.evidence_store.append_rate_datapoint(self.run_id, dp)
 
                 if relist_gap and not self._alert_in_flight:
                     self._alert_in_flight = True

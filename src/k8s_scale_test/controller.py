@@ -42,6 +42,7 @@ from k8s_scale_test.models import (
 from k8s_scale_test.monitor import PodRateMonitor
 from k8s_scale_test.observability import ObservabilityScanner, Phase as ScanPhase, ScanResult
 from k8s_scale_test.preflight import PreflightChecker
+from k8s_scale_test.tracing import phase_span, install_slow_callback_monitor
 
 import time as _time
 
@@ -181,6 +182,10 @@ class ScaleTestController:
         self._evidence_run_id = run_id
         log.info("Test run %s started", run_id)
 
+        # Install slow-callback monitor for event loop health tracking
+        loop = asyncio.get_event_loop()
+        install_slow_callback_monitor(loop)
+
         # ── Phase 1: Preflight ──────────────────────────────────────────
         # Validate that the cluster has enough capacity (IPs, vCPU quota,
         # NodePool limits, pod ceiling) to support the target pod count.
@@ -209,7 +214,8 @@ class ScaleTestController:
             original_target = self.config.target_pods
             self.config.target_pods = original_target + cl2_extra_pods
 
-        report = await self._run_preflight()
+        with phase_span("preflight", run_id=run_id, target_pods=self.config.target_pods):
+            report = await self._run_preflight()
 
         # Restore original target after preflight
         if cl2_extra_pods > 0:
@@ -423,9 +429,10 @@ class ScaleTestController:
         try:
             if self._scanner:
                 self._scanner.set_phase(ScanPhase.SCALING)
-            result = await self._execute_scaling_via_flux(
-                writer, targets, deployments, anomaly,
-            )
+            with phase_span("scaling", run_id=run_id):
+                result = await self._execute_scaling_via_flux(
+                    writer, targets, deployments, anomaly,
+                )
 
             # ── Phase 7a: Hold at Peak ─────────────────────────────────
             # Wait for the monitor to confirm target pod count, then hold
@@ -446,17 +453,18 @@ class ScaleTestController:
             if self._scanner:
                 self._scanner.set_phase(ScanPhase.HOLD_AT_PEAK)
             log.info("Holding at peak for %ds + running health checks...", hold)
-            health_sweep_task = asyncio.create_task(sweep_agent.run(sample_size=10))
-            hold_task = asyncio.create_task(asyncio.sleep(hold))
+            with phase_span("hold-at-peak", run_id=run_id, hold_seconds=hold):
+                health_sweep_task = asyncio.create_task(sweep_agent.run(sample_size=10))
+                hold_task = asyncio.create_task(asyncio.sleep(hold))
 
-            await hold_task
-            try:
-                self._health_sweep = await asyncio.wait_for(health_sweep_task, timeout=60)
-            except asyncio.TimeoutError:
-                log.warning("Health sweep timed out after hold + 60s, proceeding with partial results")
-                self._health_sweep = {"nodes_sampled": 0, "healthy": 0,
-                                      "issues": [], "timed_out": True}
-                health_sweep_task.cancel()
+                await hold_task
+                try:
+                    self._health_sweep = await asyncio.wait_for(health_sweep_task, timeout=60)
+                except asyncio.TimeoutError:
+                    log.warning("Health sweep timed out after hold + 60s, proceeding with partial results")
+                    self._health_sweep = {"nodes_sampled": 0, "healthy": 0,
+                                          "issues": [], "timed_out": True}
+                    health_sweep_task.cancel()
 
             # 7b. If sweep found issues, present to operator before cleanup
             sweep_issues = self._health_sweep.get("issues", [])
@@ -493,28 +501,39 @@ class ScaleTestController:
         # Reset all replicas to 0 and record the pod deletion rate.
         if self._ctx_writer:
             self._ctx_writer.update_phase("cleanup", datetime.now(timezone.utc))
-        await self._cleanup_pods(writer, all_labeled)
+        with phase_span("cleanup", run_id=run_id):
+            await self._cleanup_pods(writer, all_labeled)
 
-        # 8a. Collect CL2 result (if running concurrently)
-        if cl2_task is not None:
-            try:
-                cl2_summary = await cl2_task
-                if cl2_summary:
-                    log.info("CL2 preload finished: %s", cl2_summary.test_status.status)
-            except Exception as exc:
-                log.warning("CL2 preload failed: %s", exc)
+            # 8a. Collect CL2 result (if running concurrently)
+            if cl2_task is not None:
+                try:
+                    cl2_summary = await cl2_task
+                    if cl2_summary:
+                        log.info("CL2 preload finished: %s", cl2_summary.test_status.status)
+                except Exception as exc:
+                    log.warning("CL2 preload failed: %s", exc)
 
-        # 8b. CL2 cleanup (if preload was run)
-        if self.config.cl2_preload:
-            await self._cleanup_cl2()
+            # 8b. CL2 cleanup (if preload was run)
+            if self.config.cl2_preload:
+                await self._cleanup_cl2()
 
         # ── Phase 9: Summary + Verification ───────────────────────────
         # Generate the test run summary, cross-validate rate data against
         # the observer, produce the HTML chart, and optionally auto-ingest
         # resolved findings into the Known Issues KB.
         summary = self._make_summary(run_id, start, report, result)
+        verification_issues = self._verify_run_data(run_id, result)
+
+        # Downgrade validity if verification found timestamp gaps in the
+        # monitoring data — this means the rate data is unreliable.
+        if verification_issues and summary.validity == RunValidity.VALID:
+            has_timestamp_gaps = any("timestamp gap" in i for i in verification_issues)
+            if has_timestamp_gaps:
+                summary.validity = RunValidity.INVALID
+                summary.validity_reason = "monitoring_gaps"
+                log.warning("Run downgraded to INVALID due to monitoring data gaps")
+
         self.evidence_store.save_summary(run_id, summary)
-        self._verify_run_data(run_id, result)
 
         # 8c. Auto-ingest resolved findings into KB
         if self.config.kb_auto_ingest and kb_store is not None:
@@ -1061,7 +1080,7 @@ class ScaleTestController:
             except Exception as exc:
                 log.error("Failed to refresh K8s token: %s", exc)
 
-    def _verify_run_data(self, run_id: str, result) -> None:
+    def _verify_run_data(self, run_id: str, result) -> list[str]:
         """Cross-validate rate_data.jsonl (from deployment watch) against observer.log (from pod list API).
 
         The monitor and observer use completely different K8s API paths:
@@ -1074,8 +1093,10 @@ class ScaleTestController:
         Checks performed:
         1. Data point count vs expected (duration / 5s tick interval)
         2. Peak ready count matches between monitor and controller
-        3. Gaps in monitoring data
+        3. Gaps in monitoring data (is_gap flag + timestamp-based detection)
         4. Observer vs monitor peak count and peak rate cross-check
+
+        Returns a list of issue strings (empty if all checks pass).
         """
         import json
         from pathlib import Path
@@ -1086,12 +1107,12 @@ class ScaleTestController:
 
         if not rate_file.exists():
             log.warning("Verification: no rate_data.jsonl found")
-            return
+            return ["no rate_data.jsonl found"]
 
         points = [json.loads(l) for l in rate_file.read_text().splitlines() if l.strip()]
         if not points:
             log.warning("Verification: rate_data.jsonl is empty")
-            return
+            return ["rate_data.jsonl is empty"]
 
         # Check 1: data point count vs expected (duration / 5s)
         if result.steps:
@@ -1108,6 +1129,37 @@ class ScaleTestController:
         gaps = [p for p in points if p.get("is_gap")]
         if gaps:
             issues.append(f"{len(gaps)} gap(s) in rate data — chart rates may be averaged over long intervals")
+
+        # Check 3a: timestamp-based gap detection — catches invisible gaps
+        # from hold suppression or other causes where is_gap wasn't set.
+        # Only check non-hold points during the scaling phase (before ready
+        # count starts decreasing, which indicates cleanup).
+        from datetime import datetime as _dt_gap
+        scaling_points = []
+        for p in points:
+            scaling_points.append(p)
+            # Stop at the first point where ready decreases with pending=0
+            # (cleanup phase — not part of the scaling data)
+            if (len(scaling_points) > 1
+                    and p.get("ready_count", 0) < scaling_points[-2].get("ready_count", 0)
+                    and p.get("pending_count", 0) == 0):
+                scaling_points.pop()  # remove the cleanup point
+                break
+
+        gap_threshold = self._TICK_INTERVAL * 3 if hasattr(self, '_TICK_INTERVAL') else 15.0
+        timestamp_gaps = []
+        for i in range(1, len(scaling_points)):
+            try:
+                t0 = _dt_gap.fromisoformat(scaling_points[i-1]["timestamp"].replace("Z", "+00:00"))
+                t1 = _dt_gap.fromisoformat(scaling_points[i]["timestamp"].replace("Z", "+00:00"))
+                interval = (t1 - t0).total_seconds()
+                if interval > gap_threshold:
+                    timestamp_gaps.append((i, interval))
+            except Exception:
+                continue
+        if timestamp_gaps:
+            gap_details = ", ".join(f"point {i}: {iv:.0f}s" for i, iv in timestamp_gaps[:5])
+            issues.append(f"{len(timestamp_gaps)} timestamp gap(s) >15s in scaling data: {gap_details}")
 
         # Check 4: observer cross-check
         # Observer uses pod list API (actual Running pods) vs monitor's deployment watch
@@ -1199,6 +1251,7 @@ class ScaleTestController:
                 log.warning("  - %s", i)
         else:
             log.info("Verification: all checks passed (%d points, peak=%d)", len(points), rate_peak)
+        return issues
 
     @staticmethod
     def _classify_run_validity(

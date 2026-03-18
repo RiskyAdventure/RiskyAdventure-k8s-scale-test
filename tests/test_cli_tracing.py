@@ -1,8 +1,8 @@
 """Unit tests for CLI tracing integration (Task 2.4).
 
-Tests that the --enable-tracing flag is parsed correctly, tracing is
-skipped when the flag is absent, and the CLI handles init_tracing
-returning False gracefully.
+Tests that the --enable-tracing / --no-enable-tracing flags are parsed
+correctly (tracing defaults to on), tracing is skipped when explicitly
+disabled, and the CLI handles init_tracing returning False gracefully.
 
 Requirements: 1.1, 1.2, 1.6
 """
@@ -19,8 +19,12 @@ class TestEnableTracingFlagParsing:
         args = parse_args(["run", "--target-pods", "100", "--enable-tracing"])
         assert args.enable_tracing is True
 
-    def test_flag_absent(self):
+    def test_flag_absent_defaults_to_true(self):
         args = parse_args(["run", "--target-pods", "100"])
+        assert args.enable_tracing is True
+
+    def test_explicitly_disabled(self):
+        args = parse_args(["run", "--target-pods", "100", "--no-enable-tracing"])
         assert args.enable_tracing is False
 
     def test_legacy_invocation_with_flag(self):
@@ -29,14 +33,14 @@ class TestEnableTracingFlagParsing:
         assert args.enable_tracing is True
 
 
-class TestTracingNotInitializedWhenAbsent:
-    """Verify tracing is NOT initialized when --enable-tracing is absent."""
+class TestTracingNotInitializedWhenDisabled:
+    """Verify tracing is NOT initialized when --no-enable-tracing is passed."""
 
     @patch("k8s_scale_test.cli.asyncio")
     @patch("k8s_scale_test.cli._make_aws_session")
     @patch("k8s_scale_test.cli._setup_logging")
     @patch("k8s_scale_test.cli._print_report")
-    def test_init_tracing_not_called_when_flag_absent(
+    def test_init_tracing_not_called_when_disabled(
         self, mock_report, mock_logging, mock_aws, mock_asyncio
     ):
         mock_aws.return_value = MagicMock()
@@ -52,9 +56,9 @@ class TestTracingNotInitializedWhenAbsent:
             mock_ctrl_cls.return_value.run = MagicMock()
 
             from k8s_scale_test.cli import main
-            main(["run", "--target-pods", "100"])
+            main(["run", "--target-pods", "100", "--no-enable-tracing"])
 
-            # init_tracing must NOT be called when flag is absent
+            # init_tracing must NOT be called when explicitly disabled
             mock_init.assert_not_called()
             # shutdown must NOT be called either
             mock_shutdown.assert_not_called()
