@@ -69,6 +69,8 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Callable, Awaitable
 
+from k8s_scale_test.tracing import span
+
 log = logging.getLogger(__name__)
 
 
@@ -643,16 +645,18 @@ class ObservabilityScanner:
             self._last_run[query.name] = now
 
             if query.source == Source.PROMETHEUS and self._prometheus_fn:
-                result = await self._prometheus_fn(query.query)
+                with span("promql/query", query=query.query):
+                    result = await self._prometheus_fn(query.query)
             elif query.source == Source.CLOUDWATCH and self._cloudwatch_fn:
                 # CloudWatch needs time window — use last 5 minutes
                 end = datetime.now(timezone.utc)
                 start_iso = (end.replace(second=0, microsecond=0)).isoformat()
                 from datetime import timedelta
                 start = end - timedelta(minutes=5)
-                result = await self._cloudwatch_fn(
-                    query.query, start.isoformat(), end.isoformat()
-                )
+                with span("cloudwatch/insights_query", query=query.query):
+                    result = await self._cloudwatch_fn(
+                        query.query, start.isoformat(), end.isoformat()
+                    )
             else:
                 return
 
@@ -670,4 +674,4 @@ class ObservabilityScanner:
                 log.debug("Scan [%s]: normal", query.name)
 
         except Exception as exc:
-            log.debug("Scan [%s] failed: %s", query.name, exc)
+            log.warning("Scan [%s] failed: %s", query.name, exc)

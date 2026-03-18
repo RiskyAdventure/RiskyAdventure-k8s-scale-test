@@ -60,15 +60,18 @@ class NodeDiagnosticsCollector:
 
         ssm = self._get_ssm()
 
-        # Fire all commands at once — each send_command in executor
+        # Journal commands on heavily loaded nodes (stress-ng, freshly
+        # provisioned) can take >30s. Use 90s for journals, 30s otherwise.
+        _JOURNAL_KEYS = {"kubelet_logs", "containerd_logs", "journal_kubelet", "journal_containerd"}
         pending = {}
         for key, cmd in all_commands.items():
+            timeout = 90 if key in _JOURNAL_KEYS else 30
             try:
-                resp = await loop.run_in_executor(None, lambda c=cmd: ssm.send_command(
+                resp = await loop.run_in_executor(None, lambda c=cmd, t=timeout: ssm.send_command(
                     InstanceIds=[instance_id],
                     DocumentName="AWS-RunShellScript",
                     Parameters={"commands": [c]},
-                    TimeoutSeconds=30,
+                    TimeoutSeconds=t,
                 ))
                 pending[key] = (resp["Command"]["CommandId"], cmd)
             except Exception as exc:
@@ -77,7 +80,7 @@ class NodeDiagnosticsCollector:
 
         # Poll all until done — get_command_invocation in executor
         results: dict[str, SSMCommandResult] = {}
-        for _ in range(30):
+        for _ in range(90):
             if not pending:
                 break
             await asyncio.sleep(1)
@@ -109,7 +112,7 @@ class NodeDiagnosticsCollector:
             results[key] = SSMCommandResult(
                 instance_id=instance_id, command=cmd_str,
                 command_id=cmd_id or "", status="TimedOut",
-                output="", error="SSM polling timed out after 30s")
+                output="", error="SSM polling timed out after 90s")
 
         # Merge extra output into resource_utilization
         if extra_commands:

@@ -285,7 +285,12 @@ class AMPMetricCollector:
         Retries once on HTTP 403 after forcing a credential refresh, which
         handles SSO/STS token expiry during long-running tests.
         """
-        params = urllib.parse.urlencode({"query": query})
+        # Use quote() not quote_plus() so spaces become %20, not +.
+        # AMP's server-side SigV4 verification normalises to %20, so if
+        # we sign with + the canonical query strings diverge → 403.
+        params = urllib.parse.urlencode(
+            {"query": query}, quote_via=urllib.parse.quote,
+        )
         url = f"{self._endpoint}?{params}"
 
         for attempt in range(2):
@@ -301,7 +306,7 @@ class AMPMetricCollector:
                 return json.loads(response_body)
             except urllib.error.HTTPError as e:
                 if e.code == 403 and attempt == 0 and self._boto3_session:
-                    log.warning("AMP query got 403, refreshing credentials and retrying")
+                    log.warning("AMP query got 403 (possible sig mismatch or credential expiry), retrying with fresh session")
                     # Force boto3 to re-resolve credentials (handles SSO expiry)
                     import boto3
                     session_kwargs = {}
