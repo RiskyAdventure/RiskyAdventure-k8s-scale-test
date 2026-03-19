@@ -160,12 +160,51 @@ def shutdown(timeout: float = 10.0) -> None:
 
     Respects *timeout* so the process exit is never blocked for long.
     Safe to call when tracing was never initialised.
+
+    Works around an OTel SDK limitation where
+    ``TracerProvider.shutdown()`` does not forward a timeout to its
+    span processors, causing the ``BatchSpanProcessor`` worker thread
+    to block process exit indefinitely when the exporter is stuck.
     """
     global _enabled
     if not _enabled or _provider is None:
         return
     try:
-        _provider.shutdown()
+        # Uninstrument before shutting down the provider so hooks
+        # don't reference dead objects during teardown.
+        try:
+            from opentelemetry.instrumentation.botocore import BotocoreInstrumentor
+            BotocoreInstrumentor().uninstrument()
+        except Exception:
+            pass
+        try:
+            from opentelemetry.instrumentation.threading import ThreadingInstrumentor
+            ThreadingInstrumentor().uninstrument()
+        except Exception:
+            pass
+        # The OTel SDK's TracerProvider.shutdown() doesn't forward
+        # timeout to span processors, and its atexit handler also
+        # calls shutdown() without timeout.  Work around both by:
+        # 1. Shutting down each processor directly with timeout
+        # 2. Unregistering the atexit handler to prevent a second
+        #    no-timeout shutdown during interpreter teardown
+        import atexit
+        atexit_handler = getattr(_provider, "_atexit_handler", None)
+        if atexit_handler is not None:
+            atexit.unregister(atexit_handler)
+            _provider._atexit_handler = None
+
+        timeout_millis = int(timeout * 1000)
+        try:
+            multi_processor = _provider._active_span_processor
+            for sp in getattr(multi_processor, "_span_processors", []):
+                if hasattr(sp, "shutdown"):
+                    try:
+                        sp.shutdown(timeout_millis=timeout_millis)
+                    except TypeError:
+                        sp.shutdown()
+        except Exception:
+            _provider.shutdown()
     except Exception:
         log.warning("Error during tracing shutdown", exc_info=True)
     finally:

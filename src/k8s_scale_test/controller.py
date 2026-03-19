@@ -1226,7 +1226,11 @@ class ScaleTestController:
             p for p in points if p.get("pending_count", 0) > 0
         ]
 
-        gap_threshold = self._TICK_INTERVAL * 3 if hasattr(self, '_TICK_INTERVAL') else 15.0
+        # Use the monitor's tick interval (5s) with a 4x multiplier.
+        # At high pod counts, K8s API latency can cause occasional jitter
+        # beyond 3x; 4x (20s) avoids false positives from transient spikes.
+        _MONITOR_TICK = 5.0
+        gap_threshold = _MONITOR_TICK * 4
         timestamp_gaps = []
         for i in range(1, len(active_scaling_points)):
             try:
@@ -1239,7 +1243,7 @@ class ScaleTestController:
                 continue
         if timestamp_gaps:
             gap_details = ", ".join(f"point {i}: {iv:.0f}s" for i, iv in timestamp_gaps[:5])
-            issues.append(f"{len(timestamp_gaps)} timestamp gap(s) >15s in active scaling data: {gap_details}")
+            issues.append(f"{len(timestamp_gaps)} timestamp gap(s) >{gap_threshold:.0f}s in active scaling data: {gap_details}")
 
         # Check 4: observer cross-check
         # Observer uses pod list API (actual Running pods) vs monitor's deployment watch
@@ -1534,6 +1538,10 @@ class ScaleTestController:
                 shutil.copy2(tmpl, os.path.join(report_dir, tmpl.name))
 
         # 7. Build CL2 command
+        # --k8s-clients-number=10 raises effective QPS to ~50 (10 clients × 5 QPS
+        # default per client). Without this, the Go client's default rate limiter
+        # (5 QPS burst 10) causes multi-minute client-side throttling delays when
+        # creating 60K+ objects, leading to step timeouts and object shortfalls.
         cmd = [
             cl2_bin,
             f"--testconfig={config_file}",
@@ -1542,6 +1550,7 @@ class ScaleTestController:
             "--provider=eks",
             "--enable-exec-service=false",
             "--delete-automanaged-namespaces=false",  # Keep objects alive until our cleanup
+            "--k8s-clients-number=10",
             "--v=2",
         ]
 

@@ -585,6 +585,11 @@ def _print_report(summary, config):
     print(f"\n{'='*70}")
     if summary.validity == RunValidity.VALID:
         print(f"  PASSED — {peak:,} pods reached target {target:,}")
+    elif peak >= target:
+        # Target was reached but run invalidated for data-quality reasons
+        # (e.g. monitoring gaps).  Don't print a misleading shortfall.
+        print(f"  INVALID — {peak:,} pods reached target {target:,}, but run data unreliable")
+        print(f"  Reason: {summary.validity_reason}")
     else:
         print(f"  FAILED — {peak:,}/{target:,} pods ({shortfall:,} shortfall)")
         print(f"  Reason: {summary.validity_reason}")
@@ -606,8 +611,10 @@ def _print_report(summary, config):
 
     # Failure analysis — quantify each problem
     if summary.findings:
-        if summary.validity != RunValidity.VALID:
+        if summary.validity != RunValidity.VALID and shortfall > 0:
             print(f"\n  FAILURE ANALYSIS ({shortfall:,} pods not reached)")
+        elif summary.validity != RunValidity.VALID:
+            print(f"\n  ANOMALIES ({len(summary.findings)} finding(s), run invalidated: {summary.validity_reason})")
         else:
             print(f"\n  ANOMALIES ({len(summary.findings)} finding(s) during run)")
         print(f"  {'-'*52}")
