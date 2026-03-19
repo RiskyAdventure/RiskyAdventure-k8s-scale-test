@@ -9,7 +9,7 @@ The VPC CNI plugin fails to create pod sandboxes during rapid pod scaling becaus
 - EKS cluster: Wesley beta, `tf-shane` (us-west-2)
 - Node AMI: AL2023 (Karpenter-provisioned)
 - Kernel: 6.x (AL2023 default)
-- VPC CNI version: **likely pre-v1.20.5** (see Evidence section for reasoning)
+- VPC CNI version: **v1.20.4** (confirmed via DaemonSet labels and binary inspection on node)
 - Kubernetes version: 1.31+
 
 ## Reproduction
@@ -55,9 +55,15 @@ During rapid pod scaling, many pods are being set up concurrently on each node. 
 
 VPC CNI v1.20.5 (PR [#3440](https://github.com/aws/amazon-vpc-cni-k8s/pull/3440)) added `retryOnErrDumpInterrupted()` in `pkg/netlinkwrapper/netlink.go:78`, which retries `LinkList()` up to 5 times with 100ms backoff when `ErrDumpInterrupted` is returned.
 
-However, the error messages in our events contain "results may be incomplete or inconsistent" directly after "failed to generate Unique MAC addr for host side veth:" — without the "netlink operation interruption persisted after 5 attempts:" wrapper that `retryOnErrDumpInterrupted` would add. This indicates the cluster is running a VPC CNI version prior to v1.20.5 that lacks the retry logic entirely.
+**Confirmed:** The cluster is running VPC CNI v1.20.4, which does NOT contain the retry logic. This was verified three ways:
 
-Even with the v1.20.5 retry logic, the 5-retry / 500ms total window may be insufficient under heavy concurrent load. Our BPF traces show 500-700 netlink dumps per second on affected nodes, with `register_netdevice` bursts of 28-49 calls per second. Under these conditions, every netlink dump attempt within a 500ms window could be interrupted.
+1. DaemonSet labels: `app.kubernetes.io/version: v1.20.4`, `helm.sh/chart: aws-vpc-cni-1.20.4`
+2. Binary build info on node (via SSM `strings /opt/cni/bin/aws-cni`): `v1.20.4` in ldflags
+3. Binary string search: zero occurrences of `retryOnErrDumpInterrupted`, `ErrDumpInterrupted`, or `netlink operation interruption` in the binary
+
+In v1.20.4, a single `NLM_F_DUMP_INTR` flag from the kernel immediately fails the `LinkList()` call with no retry, which propagates up as a fatal error to `generateUniqueRandomMAC()` and kills the pod sandbox creation.
+
+Even with the v1.20.5 retry logic (5 retries, 100ms backoff, 500ms total window), the fix may be insufficient under heavy concurrent load. Our BPF traces show 500-700 netlink dumps per second on affected nodes, with `register_netdevice` bursts of 28-49 calls per second. Under these conditions, every netlink dump attempt within a 500ms window could be interrupted.
 
 ## Evidence
 
@@ -112,21 +118,30 @@ Key observations:
 - `rtnl_dump_ifinfo` (the function that enumerates all interfaces) is called 300-527 times in 30s
 - BPF was collected ~2 minutes after the peak, so these numbers represent the tail end of activity; the actual peak was likely higher
 
-### Error message analysis confirming pre-v1.20.5 CNI
+### CNI version confirmation (v1.20.4 — no retry logic)
 
-The error chain in the events is:
-```
-failed to setup veth pair: failed to generate Unique MAC addr for host side veth: results may be incomplete or inconsistent
-```
+Verified via three independent methods:
 
-If `retryOnErrDumpInterrupted` (added in v1.20.5) were present, the chain would be:
-```
-failed to setup veth pair: failed to generate Unique MAC addr for host side veth: netlink operation interruption persisted after 5 attempts: results may be incomplete or inconsistent
-```
+1. **DaemonSet labels** (EKS MCP `list_k8s_resources`):
+   ```
+   app.kubernetes.io/version: v1.20.4
+   helm.sh/chart: aws-vpc-cni-1.20.4
+   ```
 
-The absence of the retry wrapper message indicates the `retryOnErrDumpInterrupted` code path is not being executed.
+2. **Binary build info** (SSM `strings /opt/cni/bin/aws-cni` on node i-0702539fbf73bd12f):
+   ```
+   mod  github.com/aws/amazon-vpc-cni-k8s  v1.20.4
+   build -ldflags="-s -w -X pkg/version/info.Version=v1.20.4 ..."
+   ```
 
-**Action needed:** Confirm the CNI version with `kubectl describe daemonset aws-node -n kube-system | grep Image`.
+3. **Binary string search** (SSM on same node):
+   - `strings /opt/cni/bin/aws-cni | grep -c retryOnErrDumpInterrupted` → **0**
+   - `strings /opt/cni/bin/aws-cni | grep -c ErrDumpInterrupted` → **0**
+   - `strings /opt/cni/bin/aws-cni | grep -c "netlink operation interruption"` → **0**
+
+The `retryOnErrDumpInterrupted` function (added in v1.20.5, PR #3440) is completely absent from the deployed binary. A single `NLM_F_DUMP_INTR` kernel flag immediately fails the entire pod sandbox creation with no retry.
+
+**Action needed:** Upgrade VPC CNI to v1.20.5+ (latest is v1.21.1).
 
 ## Suggested Fixes
 
