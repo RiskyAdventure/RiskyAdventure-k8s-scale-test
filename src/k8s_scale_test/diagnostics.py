@@ -62,10 +62,17 @@ class NodeDiagnosticsCollector:
 
         # Journal commands on heavily loaded nodes (stress-ng, freshly
         # provisioned) can take >30s. Use 90s for journals, 30s otherwise.
+        # bpf_netlink_trace runs bpftrace for 30s + overhead, needs 60s SSM timeout.
         _JOURNAL_KEYS = {"kubelet_logs", "containerd_logs", "journal_kubelet", "journal_containerd"}
+        _LONG_RUNNING_KEYS = {"bpf_netlink_trace"}
         pending = {}
         for key, cmd in all_commands.items():
-            timeout = 90 if key in _JOURNAL_KEYS else 30
+            if key in _JOURNAL_KEYS:
+                timeout = 90
+            elif key in _LONG_RUNNING_KEYS:
+                timeout = 60
+            else:
+                timeout = 30
             try:
                 resp = await loop.run_in_executor(None, lambda c=cmd, t=timeout: ssm.send_command(
                     InstanceIds=[instance_id],
@@ -114,13 +121,29 @@ class NodeDiagnosticsCollector:
                 command_id=cmd_id or "", status="TimedOut",
                 output="", error="SSM polling timed out after 90s")
 
-        # Merge extra output into resource_utilization
+        # Merge extra output into resource_utilization.
+        # Always include a section for each extra command — even when output
+        # is empty — so that the status/error is visible in the saved
+        # diagnostic.  Previously, empty-output commands were silently
+        # dropped, making it impossible to tell whether bpf_netlink_trace
+        # timed out, failed, or was never sent.
         if extra_commands:
             extra_output = []
             for key in extra_commands:
                 r = results.get(key)
                 if r and r.output:
                     extra_output.append(f"\n=== {key} ===\n{r.output}")
+                elif r:
+                    extra_output.append(
+                        f"\n=== {key} ===\n[no output] status={r.status}"
+                        + (f" error={r.error}" if r.error else ""))
+                    if key in _LONG_RUNNING_KEYS:
+                        log.warning(
+                            "  %s returned no output on %s (status=%s, error=%s). "
+                            "Is the tool installed on this node?",
+                            key, node_name[:40], r.status, r.error or "none")
+                else:
+                    extra_output.append(f"\n=== {key} ===\n[not executed]")
             if extra_output and "resource_utilization" in results:
                 base = results["resource_utilization"]
                 results["resource_utilization"] = SSMCommandResult(

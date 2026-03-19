@@ -541,25 +541,40 @@ class AnomalyDetector:
             # Runs for 30s capturing register_netdevice rate, netlink_dump
             # timing, and veth_newlink calls. Only runs if bpftrace is
             # installed (pre-loaded via EC2NodeClass userData).
-            # Output is JSON on stdout, histogram on stderr.
+            #
+            # Uses integer variables (++) instead of count() aggregations
+            # because bpftrace v0.17+ rejects printf("%lld", count()).
+            # Removed unregister_netdevice probe — marked notrace on AL2023
+            # kernels, causing a warning and no data.
+            # All maps are cleared in END to suppress bpftrace's automatic
+            # map-summary printing that would pollute the JSON stdout.
+            # Stderr is captured to a temp file: on success it's discarded,
+            # on failure it's printed for diagnostics.
             extra["bpf_netlink_trace"] = (
                 "if command -v bpftrace >/dev/null 2>&1; then "
+                "_bpf_err=$(mktemp); "
                 "timeout 35 bpftrace -e '"
-                "BEGIN { @start=nsecs; @ev=0; printf(\"{\\\"events\\\":[\"); } "
-                "kprobe:register_netdevice { @reg=count(); @reg_s=count(); } "
-                "kprobe:unregister_netdevice { @unreg=count(); } "
-                "kprobe:veth_newlink { @vnl=count(); @vnl_s=count(); } "
-                "kprobe:netlink_dump { @dstart[tid]=nsecs; @dcnt=count(); } "
-                "kretprobe:netlink_dump { $s=@dstart[tid]; if($s>0){@dhist=hist((nsecs-$s)/1000);delete(@dstart[tid]);} } "
-                "kprobe:rtnl_dump_ifinfo { @ldump=count(); } "
+                "BEGIN { @start=nsecs; @ev=0; @reg=0; @vnl=0; @dcnt=0; @ldump=0; "
+                "@reg_s=0; @vnl_s=0; printf(\"{\\\"events\\\":[\"); } "
+                "kprobe:register_netdevice { @reg++; @reg_s++; } "
+                "kprobe:veth_newlink { @vnl++; @vnl_s++; } "
+                "kprobe:netlink_dump { @dstart[tid]=nsecs; @dcnt++; } "
+                "kretprobe:netlink_dump { $s=@dstart[tid]; "
+                "if($s>0){@dhist=hist((nsecs-$s)/1000);delete(@dstart[tid]);} } "
+                "kprobe:rtnl_dump_ifinfo { @ldump++; } "
                 "interval:s:1 { $e=(nsecs-@start)/1000000000; if(@ev>0){printf(\",\");} "
                 "printf(\"{\\\"t\\\":%lld,\\\"reg\\\":%lld,\\\"vnl\\\":%lld}\",$e,@reg_s,@vnl_s); "
-                "@ev++; clear(@reg_s); clear(@vnl_s); } "
+                "@ev++; @reg_s=0; @vnl_s=0; } "
                 "interval:s:30 { printf(\"],\\\"summary\\\":{\\\"register_netdevice\\\":%lld,"
-                "\\\"unregister_netdevice\\\":%lld,\\\"veth_newlink\\\":%lld,"
+                "\\\"veth_newlink\\\":%lld,"
                 "\\\"netlink_dumps\\\":%lld,\\\"rtnl_dump_ifinfo\\\":%lld}}\","
-                "@reg,@unreg,@vnl,@dcnt,@ldump); exit(); } "
-                "END { clear(@dstart); clear(@start); clear(@ev); }' 2>/dev/null; "
+                "@reg,@vnl,@dcnt,@ldump); exit(); } "
+                "END { clear(@dstart); clear(@start); clear(@ev); "
+                "clear(@reg); clear(@vnl); clear(@dcnt); clear(@ldump); "
+                "clear(@reg_s); clear(@vnl_s); clear(@dhist); }' 2>\"$_bpf_err\"; "
+                "_rc=$?; if [ $_rc -ne 0 ]; then "
+                "echo \"BPFTRACE_FAILED(rc=$_rc)\"; cat \"$_bpf_err\"; fi; "
+                "rm -f \"$_bpf_err\"; "
                 "else echo NO_BPFTRACE; fi"
             )
 
