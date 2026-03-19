@@ -444,11 +444,61 @@ def generate_chart(run_dir: str, steps: list[dict] | None = None) -> str:
 {s_rows}
 </table>"""
 
-        # K8s events section (moved here from standalone)
+        # K8s events section — cross-reference against investigation findings
+        # to flag warning reasons that were never investigated
         events_section = ""
         if error_rows:
+            # Collect all warning reasons mentioned in any finding's evidence
+            investigated_reasons: set[str] = set()
+            for af in anomaly_findings:
+                for ev_ref in af.get("evidence_references", []):
+                    if ev_ref.startswith("warnings:"):
+                        # Parse "warnings:FailedScheduling=9914,FailedCreatePodSandBox=239"
+                        for pair in ev_ref[len("warnings:"):].split(","):
+                            reason = pair.split("=")[0]
+                            if reason:
+                                investigated_reasons.add(reason)
+                # Also check k8s_events in the finding itself
+                for ev in af.get("k8s_events", []):
+                    investigated_reasons.add(ev.get("reason", ""))
+
+            # Rebuild event rows with investigation status
+            event_rows_with_status = ""
+            uninvestigated_count = 0
+            for reason, info in sorted(warning_reasons.items(), key=lambda x: -x[1]["count"]):
+                was_investigated = reason in investigated_reasons
+                if not was_investigated and info["count"] >= 10:
+                    uninvestigated_count += 1
+                    status = "<span style='color:#e94560'>⚠ Not investigated</span>"
+                elif was_investigated:
+                    status = "<span style='color:#4ecca3'>✓ In findings</span>"
+                else:
+                    status = "<span style='color:#666'>—</span>"
+                event_rows_with_status += (
+                    f"<tr><td style='color:#e94560'>{reason}</td>"
+                    f"<td>{info['count']:,}</td>"
+                    f"<td>{info['kind']}</td>"
+                    f"<td>{status}</td>"
+                    f"<td style='color:#999;font-size:12px'>{info['message'][:150]}</td></tr>\n"
+                )
+
+            gap_note = ""
+            if uninvestigated_count > 0:
+                gap_note = (
+                    f"<div style='color:#e94560;font-size:12px;margin-top:8px;padding:6px 10px;"
+                    f"background:#4a1525;border-radius:4px'>"
+                    f"⚠ {uninvestigated_count} warning reason(s) with 10+ events were not covered "
+                    f"by any anomaly investigation. The anomaly detector only triggers on rate drops — "
+                    f"these events may have occurred without causing a measurable rate change.</div>"
+                )
+
             events_section = f"""<h3 style="color:#f39c12;margin:16px 0 8px 0;font-size:14px">K8s Warning Events</h3>
-{error_table}"""
+<table>
+<tr><th style="text-align:left">Warning Reason</th><th>Count</th><th>Object</th><th style="text-align:left">Investigated?</th><th style="text-align:left">Sample Message</th></tr>
+{event_rows_with_status}
+</table>
+{transient_note}
+{gap_note}"""
 
         # Diagnostics note
         diag_note = ""
