@@ -55,21 +55,16 @@ log = logging.getLogger(__name__)
 # needs without modifying any existing module.
 # ---------------------------------------------------------------------------
 
-def _make_prometheus_executor(config) -> "Callable[[str], Awaitable[dict]] | None":
-    """Create a PromQL executor from config, or return None if AMP/Prometheus not configured."""
-    if not config.amp_workspace_id and not getattr(config, "prometheus_url", None):
+def _make_prometheus_executor(amp_collector) -> "Callable[[str], Awaitable[dict]] | None":
+    """Wrap an existing AMPMetricCollector as a PromQL executor callable.
+
+    Returns None if *amp_collector* is None (AMP/Prometheus not configured).
+    """
+    if amp_collector is None:
         return None
 
-    from k8s_scale_test.health_sweep import AMPMetricCollector
-
-    collector = AMPMetricCollector(
-        amp_workspace_id=config.amp_workspace_id,
-        prometheus_url=getattr(config, "prometheus_url", None),
-        aws_profile=getattr(config, "aws_profile", None),
-    )
-
     async def executor(query: str) -> dict:
-        return await collector._query_promql(query)
+        return await amp_collector._query_promql(query)
 
     return executor
 
@@ -437,8 +432,10 @@ class ScaleTestController:
         # ── Phase 6a: Observability Scanner ────────────────────────────
         # Create and start the proactive scanner if at least one backend
         # (AMP/Prometheus or CloudWatch) is configured.
+        # The scanner's PromQL executor reuses the same amp_collector
+        # instance as the anomaly detector and finding reviewer.
         try:
-            prom_fn = _make_prometheus_executor(self.config)
+            prom_fn = _make_prometheus_executor(amp_collector)
             cw_fn = _make_cloudwatch_executor(self.config, self.aws_client)
             if prom_fn or cw_fn:
                 self._scanner = ObservabilityScanner(
@@ -464,7 +461,7 @@ class ScaleTestController:
             anomaly.shared_ctx = self._shared_ctx
 
         # Create FindingReviewer for independent re-verification of findings.
-        # Reuses the same amp_collector and cloudwatch_fn as the scanner.
+        # Shares the same amp_collector as the anomaly detector and scanner.
         try:
             self._reviewer = FindingReviewer(
                 evidence_store=self.evidence_store,

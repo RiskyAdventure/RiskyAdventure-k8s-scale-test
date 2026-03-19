@@ -1,13 +1,20 @@
 """Shared in-memory context for cross-module finding correlation.
 
 The ObservabilityScanner writes ScanResult findings via add() (synchronous).
-The AnomalyDetector reads via query() (async, acquires asyncio.Lock).
+The AnomalyDetector reads via query() (async-compatible, thread-safe).
+
+Both add() and query() acquire a threading.Lock to protect the shared
+_entries list. A threading.Lock is used instead of asyncio.Lock because
+add() is called synchronously and query() may run on a different event
+loop (diagnostics thread, monitor alert callback thread). An asyncio.Lock
+would raise RuntimeError on Python 3.10+ when acquired from a different
+event loop than the one it was created on.
 """
 
 from __future__ import annotations
 
-import asyncio
 import re
+import threading
 from datetime import datetime, timedelta, timezone
 
 from k8s_scale_test.models import Alert
@@ -17,37 +24,40 @@ from k8s_scale_test.observability import ScanResult, Severity
 class SharedContext:
     """In-memory store for cross-module finding correlation.
 
-    Stores timestamped ScanResult entries. The scanner side writes
-    via add() (synchronous). The anomaly detector side reads via
-    query() (async, acquires lock).
+    Stores timestamped ScanResult entries. Both add() and query()
+    acquire a threading.Lock, making the store safe for concurrent
+    access from any thread or event loop.
     """
 
     def __init__(self, max_age_seconds: float = 300.0) -> None:
         self._entries: list[tuple[datetime, ScanResult]] = []
         self._max_age = timedelta(seconds=max_age_seconds)
-        self._lock = asyncio.Lock()
+        self._lock = threading.Lock()
 
     def add(self, result: ScanResult, timestamp: datetime | None = None) -> None:
-        """Add a ScanResult entry. Synchronous — safe from sync callbacks.
+        """Add a ScanResult entry. Thread-safe.
 
         Appends the entry and evicts stale entries older than max_age.
         timestamp defaults to datetime.now(timezone.utc) if not provided.
         """
         if timestamp is None:
             timestamp = datetime.now(timezone.utc)
-        self._entries.append((timestamp, result))
-        self._evict()
+        with self._lock:
+            self._entries.append((timestamp, result))
+            self._evict()
 
     async def query(
         self, reference_time: datetime, window_seconds: float = 120.0
     ) -> list[tuple[datetime, ScanResult]]:
         """Return entries within ±window_seconds of reference_time.
 
-        Acquires asyncio.Lock. Returns list of (timestamp, ScanResult)
-        tuples sorted by timestamp descending (most recent first).
+        Thread-safe. Acquires threading.Lock (not asyncio.Lock) so this
+        works correctly when called from any event loop, including the
+        separate event loops created by the diagnostics thread and the
+        monitor's alert callback.
         """
         window = timedelta(seconds=window_seconds)
-        async with self._lock:
+        with self._lock:
             results = [
                 (ts, sr)
                 for ts, sr in self._entries
@@ -57,7 +67,7 @@ class SharedContext:
         return results
 
     def _evict(self) -> None:
-        """Remove entries older than max_age from the current time."""
+        """Remove entries older than max_age. Caller must hold _lock."""
         cutoff = datetime.now(timezone.utc) - self._max_age
         self._entries = [(ts, sr) for ts, sr in self._entries if ts >= cutoff]
 
