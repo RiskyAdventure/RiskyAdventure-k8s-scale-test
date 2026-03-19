@@ -1243,6 +1243,12 @@ class ScaleTestController:
         # "Active scaling" = pending > 0 (pods are being created/scheduled).
         # Gaps during infrastructure wait, hold-at-peak, and cleanup are
         # expected and not flagged.
+        #
+        # Edge case: post-test event analysis can cause pod churn (evictions,
+        # rescheduling) during hold-at-peak, creating a second group of
+        # pending > 0 points separated from the scaling phase by minutes of
+        # pending = 0. Skip gaps where the preceding active point already
+        # reached the target — that's the hold period, not a monitoring gap.
         from datetime import datetime as _dt_gap
         active_scaling_points = [
             p for p in points if p.get("pending_count", 0) > 0
@@ -1260,6 +1266,11 @@ class ScaleTestController:
                 t1 = _dt_gap.fromisoformat(active_scaling_points[i]["timestamp"].replace("Z", "+00:00"))
                 interval = (t1 - t0).total_seconds()
                 if interval > gap_threshold:
+                    # Skip if scaling was essentially done before the gap —
+                    # this is a hold-at-peak transition, not a monitoring gap.
+                    prev_ready = active_scaling_points[i-1].get("ready_count", 0)
+                    if self.config.target_pods > 0 and prev_ready >= self.config.target_pods * 0.99:
+                        continue
                     timestamp_gaps.append((i, interval))
             except Exception:
                 continue
