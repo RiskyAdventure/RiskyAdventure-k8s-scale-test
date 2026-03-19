@@ -4,17 +4,20 @@ This document walks through every phase of a scale test run, in order. Each phas
 
 ## Phase Diagram
 
-```
-  ┌───────────┐    ┌──────────┐    ┌───────────┐    ┌──────────┐
-  │ Preflight │───►│  Infra   │───►│ Stressor  │───►│ Hold at  │
-  │  Checks   │    │ Scaling  │    │  Scaling  │    │   Peak   │
-  └───────────┘    └──────────┘    └───────────┘    └──────────┘
-                                                         │
-                                                         ▼
-                                        ┌──────────┐    ┌──────────┐
-                                        │  Node    │◄───│ Cleanup  │
-                                        │  Drain   │    │          │
-                                        └──────────┘    └──────────┘
+```mermaid
+flowchart LR
+    P1["Phase 1\nPreflight\nChecks"] --> P2["Phase 2\nInfra\nScaling"]
+    P2 --> P3["Phase 3\nStressor\nScaling"]
+    P3 --> P4["Phase 4\nHold at\nPeak"]
+    P4 --> P5["Phase 5\nCleanup"]
+    P5 --> P6["Phase 6\nNode\nDrain"]
+
+    style P1 fill:#0d3b66,stroke:#1d5a8e,color:#e0e0e0
+    style P2 fill:#14532d,stroke:#1a7a3a,color:#e0e0e0
+    style P3 fill:#7c2d12,stroke:#a3441a,color:#e0e0e0
+    style P4 fill:#4a1d6e,stroke:#6b2fa0,color:#e0e0e0
+    style P5 fill:#4a3728,stroke:#6b5040,color:#e0e0e0
+    style P6 fill:#4a3728,stroke:#6b5040,color:#e0e0e0
 ```
 
 ## Phase 1: Preflight Checks
@@ -96,10 +99,11 @@ The controller:
 
 ## Phase 4: Hold at Peak
 
-**What happens:** Once all target pods are running, the controller holds for a configurable period (default 120s). During this time:
+**What happens:** Once all target pods are running, the controller holds for a configurable period (default 90s, set via `--hold-at-peak`). During this time:
 
 1. **Health sweep** runs — queries AMP for per-node CPU, memory, disk, network errors, and pod restarts. Also checks K8s node conditions (Ready, DiskPressure, MemoryPressure, PIDPressure). Identifies specific nodes that are struggling.
 2. **Karpenter health check** runs (if InsufficientCapacityError was seen) — checks the Karpenter controller pod for restarts and resource limits.
+3. **ObservabilityScanner** continues running with hold-phase queries (memory pressure, CPU outliers, disk pressure).
 
 **Why hold?** The scaling phase is a burst — everything is changing rapidly. The hold phase reveals sustained pressure issues: memory leaks, slow garbage collection, disk exhaustion, control plane throttling. These only show up when the system is at steady-state load.
 

@@ -1,8 +1,14 @@
 # k8s-scale-test
 
-A Kubernetes scale testing framework that orchestrates rapid pod scaling on EKS clusters, monitors pod ready rates in real time, detects anomalies, and produces structured evidence for post-run analysis.
+An AI-augmented Kubernetes scale testing framework that finds infrastructure bugs you didn't know you had.
 
-Built for validating EKS infrastructure behavior at 10K–30K+ pod scale — node autoscaling (Karpenter), VPC CNI/IPAMD, scheduler throughput, and container runtime performance.
+k8s-scale-test pushes EKS clusters to 10K–30K+ pods, monitors every signal the cluster emits, and uses a multi-layer investigation pipeline to automatically diagnose failures in real time. When something breaks at scale — a VPC CNI race condition, a subnet running out of IPs, Karpenter hitting an EC2 capacity wall — the tool traces the problem from symptom to root cause without human intervention.
+
+What makes this different from load generators: the tool doesn't just create pods and measure latency. It connects three AWS MCP (Model Context Protocol) servers — Prometheus, CloudWatch, and EKS — into a unified observability fabric that an AI agent can query during a live test. The Prometheus MCP server provides fleet-wide metrics via PromQL. The CloudWatch MCP server surfaces node-level error patterns from dataplane logs. The EKS MCP server exposes cluster state, pod events, and control plane health. Together, they give the AI agent the same investigative reach as an SRE with full console access — but operating at machine speed across hundreds of nodes simultaneously.
+
+The result: bugs that would take hours of manual log correlation to find — like the [VPC CNI netlink dump interruption](docs/bug-report-vpc-cni-mac-collision.md) that silently fails 10-19% of pod creations at high density — get surfaced, diagnosed, and documented automatically during the test run.
+
+Built for validating EKS infrastructure at scale: node autoscaling (Karpenter), VPC CNI/IPAMD, scheduler throughput, container runtime performance, and the interactions between them that only break under real production-like load.
 
 ## Documentation
 
@@ -12,6 +18,7 @@ Built for validating EKS infrastructure behavior at 10K–30K+ pod scale — nod
 | [Test Lifecycle](docs/test-lifecycle.md) | Step-by-step walkthrough of every test phase with diagrams |
 | [Monitoring](docs/monitoring.md) | How pod rate measurement works, monitor vs observer, health sweep |
 | [Anomaly Detection](docs/anomaly-detection.md) | Investigation pipeline, SSM command selection, root cause extraction |
+| [Observability Scanner](docs/observability-scanner.md) | Proactive fleet-wide PromQL + CloudWatch scanning, tiered investigation |
 | [Configuration](docs/configuration.md) | All CLI flags, example commands, KB commands |
 | [MCP Setup](docs/mcp-setup.md) | Prometheus, CloudWatch, and EKS MCP server configuration |
 
@@ -81,6 +88,7 @@ python3 -m k8s_scale_test --target-pods <N> [options]
 | `--eks-cluster-name` | none | EKS cluster name for observability |
 | `--kubeconfig` | `~/.kube/config` | Path to kubeconfig |
 | `--prometheus-url` | none | Direct Prometheus URL (alternative to AMP) |
+| `--enable-tracing` / `--no-enable-tracing` | enabled | Enable OpenTelemetry tracing (exports to X-Ray via ADOT) |
 | `-v` | false | Verbose logging |
 
 ### Known Issues KB
@@ -139,9 +147,14 @@ src/k8s_scale_test/
 ├── events.py           # K8s event watcher
 ├── diagnostics.py      # Node diagnostics via SSM (kubelet, containerd, IPAMD logs)
 ├── metrics.py          # Node metrics analysis via Prometheus
+├── observability.py    # Fleet-wide proactive scanning (PromQL + CloudWatch queries)
+├── shared_context.py   # In-memory shared state for scanner ↔ anomaly detector correlation
+├── reviewer.py         # Skeptical async review of findings (independent re-verification)
 ├── chart.py            # HTML chart generation from rate data
 ├── cl2_parser.py       # ClusterLoader2 result parser
 ├── agent_context.py    # Context file writer for AI sub-agent integration
+├── agent_schema.py     # Agent finding validation schema
+├── tracing.py          # OpenTelemetry instrumentation (X-Ray export, slow callback monitor)
 ├── models.py           # Data models (dataclasses) for all structured data
 ├── kb_store.py         # Known Issues KB storage (DynamoDB + S3)
 ├── kb_matcher.py       # Signature matching against KB entries

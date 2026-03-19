@@ -12,20 +12,23 @@ Think of it as a smoke detector — it runs cheap fleet-wide queries every 15-30
 
 The scanner runs as a parallel, independent component. It does not replace or modify any existing module.
 
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│                        Scale Test Controller                        │
-│                                                                     │
-│  ┌──────────┐  ┌──────────┐  ┌───────────┐  ┌──────────────────┐  │
-│  │ Monitor  │  │ Anomaly  │  │  Event    │  │  Observability   │  │
-│  │ (rate)   │  │ Detector │  │  Watcher  │  │  Scanner         │  │
-│  └────┬─────┘  └────┬─────┘  └─────┬─────┘  └────────┬─────────┘  │
-│       │              │              │                  │             │
-│  Pod ready rate  Reactive       K8s Warning     Fleet-wide          │
-│  via deployment  investigation  event stream    PromQL + CW         │
-│  watch API       after alerts                   queries every       │
-│                                                 15-30 seconds       │
-└─────────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TB
+    subgraph Controller["Scale Test Controller"]
+        direction LR
+        MON["Monitor\n(rate)"]
+        AD["Anomaly\nDetector"]
+        EW["Event\nWatcher"]
+        SCAN["Observability\nScanner"]
+    end
+
+    MON ---|"Pod ready rate\nvia deployment\nwatch API"| K8S["K8s API"]
+    AD ---|"Reactive investigation\nafter alerts"| SSM["SSM / EC2"]
+    EW ---|"K8s Warning\nevent stream"| K8S
+    SCAN ---|"Fleet-wide PromQL + CW\nqueries every 15-30s"| AMP["AMP / CloudWatch"]
+
+    style Controller fill:#1a1a2e,stroke:#16213e,color:#e0e0e0
+    style SCAN fill:#14532d,stroke:#1a7a3a,color:#e0e0e0
 ```
 
 Each module owns its own data path:
@@ -44,26 +47,26 @@ The scanner's fleet-aggregated queries (`avg(...)`, `count(...)`, `sum(...)`) se
 
 The scanner uses two tiers to balance cost and depth:
 
-```
-Tier 1 — Prometheus (broad sweep, every 15-30s)
-  │
-  │  Fleet-wide PromQL queries. One HTTP request covers all nodes.
-  │  Catches: node count stalls, pending backlogs, CPU/memory pressure,
-  │           Karpenter queue depth, network errors, disk pressure.
-  │
-  │  If a finding is detected:
-  │
-  ▼
-Tier 2 — CloudWatch (drill-down, every 60s or on-demand)
-  │
-  │  CloudWatch Logs Insights queries against EKS dataplane logs.
-  │  More expensive (scans log data) but provides specific error
-  │  messages needed to diagnose the issue.
-  │
-  │  Example: "Top 10 error patterns in dataplane logs"
-  │
-  ▼
-ScanResult finding → logged + persisted + included in summary
+```mermaid
+flowchart TB
+    T1["Tier 1 — Prometheus\n(broad sweep, every 15-30s)"]
+    T1_DESC["Fleet-wide PromQL queries\nOne HTTP request covers all nodes\nCatches: node stalls, pending backlogs,\nCPU/memory pressure, Karpenter queue,\nnetwork errors, disk pressure"]
+
+    T1 --> T1_DESC
+    T1_DESC --> CHECK{"Finding\ndetected?"}
+    CHECK -->|"Yes"| T2
+    CHECK -->|"No (or every 4th scan)"| T2_BG["Tier 2 background check"]
+
+    T2["Tier 2 — CloudWatch\n(drill-down, every 60s or on-demand)"]
+    T2_DESC["CloudWatch Logs Insights queries\nagainst EKS dataplane logs\nProvides specific error messages\ne.g. Top 10 error patterns"]
+
+    T2 --> T2_DESC
+    T2_BG --> T2_DESC
+    T2_DESC --> RESULT["ScanResult finding\n→ logged + persisted + included in summary"]
+
+    style T1 fill:#0d3b66,stroke:#1d5a8e,color:#e0e0e0
+    style T2 fill:#4a1d6e,stroke:#6b2fa0,color:#e0e0e0
+    style RESULT fill:#14532d,stroke:#1a7a3a,color:#e0e0e0
 ```
 
 Tier 2 only runs when Tier 1 finds something (or every 4th scan cycle as a background check). This avoids unnecessary CloudWatch costs during normal scaling.
@@ -98,31 +101,22 @@ Queries are defined as data (`ScanQuery` objects) rather than hardcoded logic. E
 
 The scanner follows the controller's test phases:
 
-```
-Controller.run()
-  │
-  ├── Phase 5: Monitoring Setup
-  │     Create scanner with executor functions
-  │     Register finding callback
-  │     Start as asyncio.create_task(scanner.run())
-  │
-  ├── Phase 7: Scaling
-  │     scanner.set_phase(Phase.SCALING)
-  │     │
-  │     └── Scaling loop (every 5s)
-  │           scanner.update_context(elapsed_minutes, pending, ready)
-  │           Scanner runs Tier 1 queries concurrently
-  │           Scanner runs Tier 2 queries if triggered
-  │           Findings → callback → log + evidence store
-  │
-  ├── Phase 7a: Hold at Peak
-  │     scanner.set_phase(Phase.HOLD_AT_PEAK)
-  │     Scanner continues running with hold-phase queries
-  │
-  └── Finally block
-        scanner.stop()
-        await scanner_task
-        Include scanner findings in TestRunSummary
+```mermaid
+flowchart TB
+    RUN["Controller.run()"] --> P5["Phase 5: Monitoring Setup\nCreate scanner with executor functions\nRegister finding callback\nStart as asyncio.create_task(scanner.run())"]
+
+    P5 --> P7["Phase 7: Scaling\nscanner.set_phase(Phase.SCALING)"]
+
+    P7 --> LOOP["Scaling loop (every 5s)\nscanner.update_context(elapsed, pending, ready)\nScanner runs Tier 1 queries concurrently\nScanner runs Tier 2 if triggered\nFindings → callback → log + evidence store"]
+
+    LOOP --> P7A["Phase 7a: Hold at Peak\nscanner.set_phase(Phase.HOLD_AT_PEAK)\nScanner continues with hold-phase queries"]
+
+    P7A --> STOP["Finally block\nscanner.stop()\nawait scanner_task\nInclude scanner findings in TestRunSummary"]
+
+    style RUN fill:#0d3b66,stroke:#1d5a8e,color:#e0e0e0
+    style P7 fill:#7c2d12,stroke:#a3441a,color:#e0e0e0
+    style P7A fill:#4a1d6e,stroke:#6b2fa0,color:#e0e0e0
+    style STOP fill:#4a3728,stroke:#6b5040,color:#e0e0e0
 ```
 
 ## Context Updates

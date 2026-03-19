@@ -138,7 +138,7 @@ class TestConfig(_SerializableMixin):
     batch_size: int = 50
     batch_interval_seconds: float = 10.0
     rate_drop_threshold_pct: float = 75.0
-    pending_timeout_seconds: float = 120.0
+    pending_timeout_seconds: float = 600.0
     rolling_avg_window_seconds: float = 30.0
     kubeconfig: Optional[str] = None
     aws_profile: Optional[str] = None

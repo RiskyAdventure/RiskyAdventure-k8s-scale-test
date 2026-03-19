@@ -172,7 +172,7 @@ class ScaleTestController:
     async def run(self) -> TestRunSummary:
         """Execute the full test lifecycle.
 
-        Phases (matching docs/test-lifecycle.md):
+        Phases:
             1. Preflight — validate cluster capacity can support the target
             2. Operator Approval — human gate before scaling begins
             3. Infrastructure Scaling — deploy iperf3 servers, patch manifests
@@ -180,6 +180,8 @@ class ScaleTestController:
             5. Hold at Peak — wait at target count, run health sweep
             6. Cleanup — reset replicas to 0, drain nodes
             7. Summary — generate report, cross-validate data, produce chart
+
+        See docs/test-lifecycle.md for the user-facing phase walkthrough.
         """
         start = datetime.now(timezone.utc)
         run_id = self.evidence_store.create_run(self.config)

@@ -59,6 +59,22 @@
 | `--eks-cluster-name NAME` | none | EKS cluster name for observability checks |
 | `--prometheus-url URL` | none | Direct Prometheus URL (alternative to AMP) |
 
+### Tracing
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--enable-tracing` / `--no-enable-tracing` | enabled | Enable OpenTelemetry tracing (exports to X-Ray via ADOT OTLPAwsSpanExporter with SigV4) |
+
+### Knowledge Base Infrastructure
+
+These flags apply to both `run` and `kb` subcommands:
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--kb-table NAME` | `scale-test-kb` | DynamoDB table name for KB storage |
+| `--kb-bucket NAME` | none | S3 bucket for KB entry storage |
+| `--kb-prefix PREFIX` | `kb-entries/` | S3 key prefix for KB entries |
+
 ## Example Commands
 
 ### Basic 10K test
@@ -98,6 +114,9 @@ python3 -m k8s_scale_test \
 # List all known failure patterns
 k8s-scale-test kb list
 
+# List only pending (unreviewed) entries
+k8s-scale-test kb list --pending
+
 # Search by keyword
 k8s-scale-test kb search "IPAMD"
 k8s-scale-test kb search "image pull"
@@ -108,6 +127,24 @@ k8s-scale-test kb show ipamd-mac-collision
 # Seed the KB with built-in patterns
 k8s-scale-test kb seed
 
-# Add a new pattern from a finding
-k8s-scale-test kb add --from-finding path/to/finding.json
+# Add a new pattern manually
+k8s-scale-test kb add \
+  --title "My New Pattern" \
+  --category networking \
+  --root-cause "Description of the root cause" \
+  --event-reasons "FailedCreatePodSandBox,FailedScheduling" \
+  --log-patterns "error pattern one,error pattern two" \
+  --severity warning
+
+# Ingest findings from a completed test run
+k8s-scale-test kb ingest path/to/scale-test-results/2026-03-17_18-52-18
+
+# Approve a pending entry
+k8s-scale-test kb approve ipamd-mac-collision
+
+# Remove an entry
+k8s-scale-test kb remove ipamd-mac-collision
+
+# Set up DynamoDB table and verify S3 bucket
+k8s-scale-test kb setup --kb-table scale-test-kb --kb-bucket my-bucket
 ```
