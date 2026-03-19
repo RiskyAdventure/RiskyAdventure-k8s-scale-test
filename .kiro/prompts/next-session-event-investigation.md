@@ -1,4 +1,4 @@
-# Next Session: Post-Scaling Event Investigation
+# Next Session: Post-Test Event Analysis
 
 Read `.kiro/steering/engineering-rigor.md` before starting any work. Follow it rigorously — form testable hypotheses, negatively test them, read callers/tests/config before changing code, and validate findings before implementing.
 
@@ -8,7 +8,7 @@ This is a Kubernetes scale test tool (`src/k8s_scale_test/`) that scales 30K pod
 
 - `monitor.py` — PodRateMonitor: deployment watch-based pod ready rate tracking
 - `anomaly.py` — AnomalyDetector: reactive investigation when rate drops are detected
-- `observability.py` — ObservabilityScanner: proactive AMP/CloudWatch scanning (12 queries)
+- `observability.py` — ObservabilityScanner: proactive AMP/CloudWatch scanning
 - `health_sweep.py` — HealthSweepAgent: per-node health at hold-at-peak
 - `events.py` — EventWatcher: K8s warning event streaming to events.jsonl
 - `controller.py` — Observer: independent pod count cross-check
@@ -17,59 +17,55 @@ Read `docs/architecture.md`, `docs/anomaly-detection.md`, and `docs/observabilit
 
 ## Problem Statement
 
-The anomaly detector only triggers investigations on pod ready rate drops (detected by PodRateMonitor). K8s warning events are recorded by the EventWatcher to `events.jsonl` but never analyzed proactively. This creates a blind spot: thousands of `Failed`, `FailedCreatePodSandBox`, or `FailedCreatePodContainer` events can accumulate without triggering an investigation if pods eventually succeed on retry and the rate doesn't drop measurably.
+The anomaly detector investigates scaling problems — rate drops, pending timeouts. That part works. The gap is everything else.
 
-Evidence from the 2026-03-18 run: 16,999 warning events (3,059 `Failed`, 1,249 `FailedCreatePodSandBox`, 20 `FailedCreatePodContainer`) but only 1 investigation triggered (by a rate drop). The chart flags these as "⚠ Not investigated" but the underlying analysis gap remains.
+During a scale test, thousands of K8s warning events accumulate that have nothing to do with scaling speed but indicate real cluster health problems: container runtime failures (`Failed`, `FailedCreatePodContainer`), CNI issues (`FailedCreatePodSandBox`), evictions, OOM kills. These get recorded to `events.jsonl` by the EventWatcher but nobody ever investigates them. They show up on the chart as raw event counts with "⚠ Not investigated" flags, but the analysis pipeline never runs against them.
 
-## Design: Hold-at-Peak Event Analysis
+Evidence from the 2026-03-18 run: 16,999 warning events across 5 reasons. The anomaly detector investigated 1 rate drop and covered `FailedCreatePodSandBox` in its evidence. But `Failed` (3,059 events — runc container creation errors) and `FailedCreatePodContainer` (20 events) were never investigated. These are real problems worth understanding, not scaling artifacts.
 
-Run event-driven investigations during the hold-at-peak phase (Phase 7a in controller.py), after scaling completes but before cleanup. This is the right timing because:
+## Design: Post-Test Event Analysis Pass
 
-1. During scaling, the `_alert_in_flight` mutex prevents concurrent investigations to avoid duplicate SSM calls that could interfere with node provisioning. Running event investigations during scaling would either block rate-drop investigations or require parallel SSM calls.
+After scaling completes and the hold-at-peak health sweep finishes, run a targeted investigation pass against uninvestigated high-volume warning patterns. This happens in Phase 7a of the controller, during hold-at-peak, when the cluster is stable and SSM calls won't interfere with scaling.
 
-2. During hold-at-peak, the cluster is stable, the rate monitor is quiet (at target, no more rate drops), and there's already a dedicated window (configurable via `--hold-at-peak`, default 90s) where the health sweep runs. This is the natural place for post-scaling analysis.
+The scaling investigation (rate-drop triggered) stays exactly as-is. This is a separate, additive pass that catches the non-scaling problems the existing pipeline misses.
 
-3. The rate-drop trigger still covers the acute case during scaling (failures bad enough to slow the rate). The hold-at-peak event analysis catches the chronic case (failures that don't affect the rate but indicate underlying problems worth investigating).
+### What It Does
 
-### Trade-offs
-
-- You lose real-time investigation of event surges during scaling. If `Failed` events pile up at minute 3 of a 10-minute scale, you won't get an investigation until hold-at-peak.
-- If `hold_at_peak` is set to 0 or very short, event analysis won't have time to run. The implementation should enforce a minimum hold duration when event analysis is needed, or run it after the hold timer but before cleanup.
-- SSM calls during hold-at-peak are safe (cluster is stable) but still take 10-30s per node. Cap at 3 nodes per investigation to keep total time under 2 minutes.
+1. After the health sweep completes during hold-at-peak, query the EventWatcher for accumulated warning reason counts
+2. Cross-reference against existing findings to identify reasons that were never covered by a rate-drop investigation
+3. For each uncovered reason with significant volume (>100 events), run the anomaly detector's investigation pipeline to produce a proper Finding with root cause, evidence, and SSM diagnostics
+4. These findings appear in the chart's Investigation Summary alongside the rate-drop findings
 
 ### Implementation Plan
 
-#### 1. EventWatcher: Track warning reason counts (`events.py`)
+#### 1. EventWatcher: Expose warning summary (`events.py`)
 
-Add an in-memory counter to EventWatcher that tracks warning events by reason during the test. No alert callback needed — just expose a method to query accumulated counts.
+Add a method to query accumulated warning counts and identify uncovered reasons:
 
 ```python
 def get_warning_summary(self) -> dict[str, dict]:
-    """Return {reason: {count, first_seen, last_seen, sample_message}} for all warning reasons."""
+    """Return {reason: {count, sample_message, kind}} for all warning reasons."""
+
+def get_uncovered_reasons(self, findings: list, threshold: int = 100) -> list[tuple[str, dict]]:
+    """Return warning reasons with >threshold events not covered by any finding."""
 ```
 
 #### 2. New AlertType (`models.py`)
 
-Add `AlertType.EVENT_SURGE` for event-triggered alerts. The alert context should include the warning reason, count, and sample messages.
+Add `AlertType.EVENT_ANALYSIS` for post-test event-triggered alerts. Context includes the specific warning reason, count, and sample messages.
 
-#### 3. Post-scaling event analysis (`controller.py`)
+#### 3. Controller: Post-test event analysis (`controller.py`)
 
-In Phase 7a (hold-at-peak), after the health sweep completes:
-
-1. Get the EventWatcher's warning summary
-2. Get the list of warning reasons already covered by existing findings (from `self._findings`)
-3. For each uncovered reason with >100 events, create an `EVENT_SURGE` alert and run `anomaly.handle_alert()`
-4. Run these sequentially (not concurrently) to avoid SSM contention
-5. Cap at 3 event-surge investigations per run to bound the hold-at-peak extension
+In Phase 7a, after the health sweep, before cleanup:
 
 ```python
-# Phase 7a addition — after health sweep, before cleanup
+# After health sweep completes
 uncovered = event_watcher.get_uncovered_reasons(self._findings, threshold=100)
-for reason, info in uncovered[:3]:
+for reason, info in uncovered[:3]:  # Cap at 3 to bound hold-at-peak extension
     alert = Alert(
-        alert_type=AlertType.EVENT_SURGE,
+        alert_type=AlertType.EVENT_ANALYSIS,
         timestamp=datetime.now(timezone.utc),
-        message=f"Event surge: {reason} x{info['count']} (uninvestigated)",
+        message=f"Post-test analysis: {reason} x{info['count']}",
         context={"reason": reason, "count": info["count"],
                  "sample": info["sample_message"], "namespaces": namespaces},
     )
@@ -77,31 +73,34 @@ for reason, info in uncovered[:3]:
     self._findings.append(finding)
 ```
 
-#### 4. AnomalyDetector: Handle EVENT_SURGE (`anomaly.py`)
+#### 4. AnomalyDetector: No major changes needed (`anomaly.py`)
 
-The existing `handle_alert` should work without major changes — it collects K8s events in Layer 1 regardless of alert type. But add a log line to distinguish event-surge investigations from rate-drop investigations in the output.
+`handle_alert` already collects K8s events in Layer 1 regardless of alert type. Add a log line to distinguish post-test analysis from rate-drop investigations. The full 6-layer pipeline (events → pod phases → stuck nodes → node conditions → AMP → ENI → SSM) runs as normal.
 
-#### 5. Deduplication
+### Design Constraints
 
-Before creating an EVENT_SURGE alert, check if the warning reason already appears in any existing finding's `evidence_references`. The EventWatcher's `get_uncovered_reasons()` method should accept the findings list and filter out already-covered reasons.
+- Cap at 3 event-analysis investigations per run to keep hold-at-peak extension under 5 minutes (each investigation takes ~60-90s with SSM)
+- Run sequentially, not concurrently — avoids SSM contention
+- Skip reasons already covered by rate-drop findings (dedup via evidence_references)
+- If `--hold-at-peak 0`, still run the event analysis after the zero-second hold but before cleanup
+- The `_alert_in_flight` mutex in PodRateMonitor is irrelevant here — the monitor is stopped before hold-at-peak event analysis runs
 
 ### Key Files to Modify
 
 - `src/k8s_scale_test/events.py` — add `get_warning_summary()` and `get_uncovered_reasons()`
-- `src/k8s_scale_test/models.py` — add `AlertType.EVENT_SURGE`
+- `src/k8s_scale_test/models.py` — add `AlertType.EVENT_ANALYSIS`
 - `src/k8s_scale_test/controller.py` — add event analysis to Phase 7a after health sweep
-- `src/k8s_scale_test/anomaly.py` — minor: log EVENT_SURGE alert type distinctly
+- `src/k8s_scale_test/anomaly.py` — minor: log EVENT_ANALYSIS alert type distinctly
 
 ### Verification
 
-- Run against existing test data in `scale-test-results/2026-03-18_11-34-04/` to verify that the `Failed` (3,059 events) and `FailedCreatePodSandBox` (1,249 events) reasons would have triggered investigations
 - The chart's "Investigated?" column should show "✓ In findings" for all high-volume warning reasons after the fix
 - All 244 existing tests must pass
-- Test with `--hold-at-peak 0` to verify graceful handling (event analysis should still run, just after the zero-second hold)
+- Test with `--hold-at-peak 0` to verify event analysis still runs
 
 ## Recent Changes (Previous Session)
 
-1. **Chart: Investigation Summary** — replaced the simple error count table with a comprehensive section showing anomaly findings (deduplicated root causes, evidence chains, investigation layers), proactive scanner results, K8s warning events with investigation status, and diagnostic collection notes.
+1. **Chart: Investigation Summary** — replaced the simple error count table with a comprehensive section showing anomaly findings with deduplicated root causes, evidence chains, investigation layers, proactive scanner results, K8s warning events with investigation status, and diagnostic collection notes.
 2. **Anomaly: SSM-verified root causes** — the correlator no longer assumes MAC collision for FailedCreatePodSandBox. It checks SSM logs for the specific signature before labeling.
 3. **Anomaly: Post-SSM KB check** — added a second KB lookup after SSM diagnostics are collected, so KB entries with log_patterns can match.
 4. **Scanner: Service-level error grouping** — changed the CloudWatch Insights query to group by systemd_unit and count distinct hosts.
@@ -115,12 +114,10 @@ python3 -m pytest tests/ -v
 
 ## Key Files
 
-- `src/k8s_scale_test/anomaly.py` — the reactive investigation pipeline
-- `src/k8s_scale_test/observability.py` — the proactive scanner
-- `src/k8s_scale_test/events.py` — EventWatcher (event streaming, needs warning summary)
-- `src/k8s_scale_test/monitor.py` — PodRateMonitor (has the `_alert_in_flight` pattern)
-- `src/k8s_scale_test/controller.py` — wires everything together, Phase 7a is the target
+- `src/k8s_scale_test/controller.py` — Phase 7a is the target for the new analysis pass
+- `src/k8s_scale_test/events.py` — EventWatcher (needs warning summary methods)
+- `src/k8s_scale_test/anomaly.py` — the investigation pipeline (runs as-is for event alerts)
 - `src/k8s_scale_test/models.py` — Alert, AlertType, Finding data models
+- `src/k8s_scale_test/monitor.py` — PodRateMonitor (unchanged, for reference)
 - `src/k8s_scale_test/chart.py` — investigation summary chart generation
-- `src/k8s_scale_test/reviewer.py` — skeptical finding review
-- `src/k8s_scale_test/shared_context.py` — cross-source correlation store
+- `src/k8s_scale_test/observability.py` — the proactive scanner
