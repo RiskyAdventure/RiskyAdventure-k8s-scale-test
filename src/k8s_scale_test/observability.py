@@ -327,20 +327,24 @@ def _default_catalog() -> list[ScanQuery]:
 
         # --- CloudWatch drill-down (Tier 2) ---
         # Only triggered by Prometheus findings or periodically (every 4th scan).
-        # Queries EKS dataplane logs for error patterns to provide specific
-        # diagnostic detail that Prometheus metrics can't give us.
+        # Queries EKS dataplane logs for error counts per service (kubelet,
+        # containerd, etc.) and per unique host. Groups by systemd_unit to
+        # show which services are erroring, and counts distinct hosts to
+        # show the blast radius.
         ScanQuery(
             name="cw_top_errors",
             source=Source.CLOUDWATCH,
             query=(
-                "fields @timestamp, @message"
+                "fields @message"
                 " | filter @message like /(?i)error|fail/"
-                " | stats count() as cnt by @message"
+                " | parse @message '\"systemd_unit\":\"*\"' as svc"
+                " | parse @message '\"hostname\":\"*\"' as host"
+                " | stats count() as cnt, count_distinct(host) as hosts by svc"
                 " | sort cnt desc"
                 " | limit 10"
             ),
             phases=[Phase.SCALING, Phase.HOLD_AT_PEAK],
-            description="Top 10 error patterns in dataplane logs",
+            description="Error counts per service in dataplane logs",
             interval_seconds=60.0,
             # Only run when triggered by a Prometheus finding or periodically
             condition=lambda ctx: ctx.get("has_prometheus_finding", False)
@@ -475,20 +479,35 @@ def _eval_pending_ratio(result: dict, ctx: dict) -> ScanResult | None:
 
 
 def _eval_cw_errors(result: dict, ctx: dict) -> ScanResult | None:
-    """Summarize top CloudWatch error patterns (Tier 2 drill-down).
+    """Summarize error counts per service from CloudWatch dataplane logs.
 
-    This evaluator is only called when a Prometheus finding triggered a
-    CloudWatch drill-down, or periodically (every 4th scan cycle) as a
-    background check. Returns the top 5 error patterns with counts.
+    Groups errors by systemd_unit (kubelet.service, containerd.service, etc.)
+    and counts distinct hosts affected. This gives a high-level view of which
+    services are erroring and how widespread the problem is.
     """
     results = result.get("results", [])
     if not results:
         return None
     top = results[:5]
-    lines = [f"  {r.get('cnt', '?')}x: {r.get('@message', '?')[:120]}" for r in top]
+    total_errors = 0
+    lines = []
+    for r in top:
+        svc = r.get("svc", r.get("@message", "unknown"))[:60]
+        cnt = r.get("cnt", "?")
+        hosts = r.get("hosts", "?")
+        lines.append(f"  {svc}: {cnt} errors across {hosts} hosts")
+        try:
+            total_errors += int(cnt)
+        except (ValueError, TypeError):
+            pass
+
+    severity = Severity.INFO
+    if total_errors > 100:
+        severity = Severity.WARNING
+
     return ScanResult(
-        query_name="cw_top_errors", severity=Severity.INFO,
-        title=f"Top {len(top)} error patterns in dataplane logs",
+        query_name="cw_top_errors", severity=severity,
+        title=f"Dataplane errors by service ({total_errors} total across {len(top)} services)",
         detail="\n".join(lines),
         source=Source.CLOUDWATCH, raw_result=result,
     )

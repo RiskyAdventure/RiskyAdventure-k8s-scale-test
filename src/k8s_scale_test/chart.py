@@ -295,8 +295,14 @@ def generate_chart(run_dir: str, steps: list[dict] | None = None) -> str:
     # Group scanner findings by query_name, extract error patterns not hostnames
     scanner_groups: dict[str, dict] = {}
     import re as _re
-    _scanner_pattern = _re.compile(
+    # Old format: '2x: {"hostname":"...","systemd_unit":"...","message":"..."}'
+    _scanner_json_pattern = _re.compile(
         r'(\d+)x:\s*\{[^}]*?"systemd_unit"\s*:\s*"([^"]*)"[^}]*?"message"\s*:\s*"([^"]*)'
+    )
+    # New format: '  kubelet.service: 47 errors across 12 hosts'
+    _scanner_svc_pattern = _re.compile(
+        r'^\s*(\S+\.service):\s*(\d+)\s*errors\s+across\s+(\d+)\s*hosts',
+        _re.MULTILINE,
     )
     for sf in scanner_findings:
         qname = sf.get("query_name", "unknown")
@@ -315,13 +321,23 @@ def generate_chart(run_dir: str, steps: list[dict] | None = None) -> str:
             if sev_order.get(sev, 0) > sev_order.get(scanner_groups[qname]["severity"], 0):
                 scanner_groups[qname]["severity"] = sev
 
-        # Extract error patterns from detail using regex (JSON is often truncated)
         detail = sf.get("detail", "")
-        for m in _scanner_pattern.finditer(detail):
-            count_str, unit, msg = m.group(1), m.group(2), m.group(3)
-            scanner_groups[qname]["patterns"].append(
-                {"count": f"{count_str}x", "unit": unit, "message": msg[:120]}
-            )
+
+        # Try new service-level format first
+        svc_matches = list(_scanner_svc_pattern.finditer(detail))
+        if svc_matches:
+            for m in svc_matches:
+                svc, cnt, hosts = m.group(1), m.group(2), m.group(3)
+                scanner_groups[qname]["patterns"].append(
+                    {"count": f"{cnt}x", "unit": svc, "message": f"{cnt} errors across {hosts} hosts"}
+                )
+        else:
+            # Fall back to old JSON format — extract unit + message, strip hostname
+            for m in _scanner_json_pattern.finditer(detail):
+                count_str, unit, msg = m.group(1), m.group(2), m.group(3)
+                scanner_groups[qname]["patterns"].append(
+                    {"count": f"{count_str}x", "unit": unit, "message": msg[:120]}
+                )
 
     # Deduplicate patterns per scanner group by unit + message prefix
     for qname, info in scanner_groups.items():
