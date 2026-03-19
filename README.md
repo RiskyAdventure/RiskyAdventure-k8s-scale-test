@@ -2,7 +2,7 @@
 
 An AI-augmented Kubernetes scale testing framework that finds infrastructure bugs you didn't know you had.
 
-k8s-scale-test pushes EKS clusters to 10K–30K+ pods, monitors every signal the cluster emits, and uses a multi-layer investigation pipeline to automatically diagnose failures in real time. When something breaks at scale — a VPC CNI race condition, a subnet running out of IPs, Karpenter hitting an EC2 capacity wall — the tool traces the problem from symptom to root cause without human intervention.
+k8s-scale-test pushes EKS clusters to their limits, monitors every signal the cluster emits, and uses a multi-layer investigation pipeline to automatically diagnose failures in real time. When something breaks at scale — a VPC CNI race condition, a subnet running out of IPs, Karpenter hitting an EC2 capacity wall — the tool traces the problem from symptom to root cause without human intervention.
 
 What makes this different from load generators: the tool doesn't just create pods and measure latency. It connects three AWS MCP (Model Context Protocol) servers — Prometheus, CloudWatch, and EKS — into a unified observability fabric that an AI agent can query during a live test. The Prometheus MCP server provides fleet-wide metrics via PromQL. The CloudWatch MCP server surfaces node-level error patterns from dataplane logs. The EKS MCP server exposes cluster state, pod events, and control plane health. Together, they give the AI agent the same investigative reach as an SRE with full console access — but operating at machine speed across hundreds of nodes simultaneously.
 
