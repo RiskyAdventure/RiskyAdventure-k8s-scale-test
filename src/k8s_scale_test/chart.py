@@ -292,8 +292,12 @@ def generate_chart(run_dir: str, steps: list[dict] | None = None) -> str:
         except Exception:
             pass
 
-    # Group scanner findings by query_name, keep latest per group
+    # Group scanner findings by query_name, extract error patterns not hostnames
     scanner_groups: dict[str, dict] = {}
+    import re as _re
+    _scanner_pattern = _re.compile(
+        r'(\d+)x:\s*\{[^}]*?"systemd_unit"\s*:\s*"([^"]*)"[^}]*?"message"\s*:\s*"([^"]*)'
+    )
     for sf in scanner_findings:
         qname = sf.get("query_name", "unknown")
         sev = sf.get("severity", "info")
@@ -303,14 +307,42 @@ def generate_chart(run_dir: str, steps: list[dict] | None = None) -> str:
                 "severity": sev,
                 "source": sf.get("source", ""),
                 "count": 1,
-                "latest_detail": sf.get("detail", "")[:300],
+                "patterns": [],
             }
         else:
             scanner_groups[qname]["count"] += 1
-            scanner_groups[qname]["latest_detail"] = sf.get("detail", "")[:300]
             sev_order = {"critical": 3, "warning": 2, "info": 1}
             if sev_order.get(sev, 0) > sev_order.get(scanner_groups[qname]["severity"], 0):
                 scanner_groups[qname]["severity"] = sev
+
+        # Extract error patterns from detail using regex (JSON is often truncated)
+        detail = sf.get("detail", "")
+        for m in _scanner_pattern.finditer(detail):
+            count_str, unit, msg = m.group(1), m.group(2), m.group(3)
+            scanner_groups[qname]["patterns"].append(
+                {"count": f"{count_str}x", "unit": unit, "message": msg[:120]}
+            )
+
+    # Deduplicate patterns per scanner group by unit + message prefix
+    for qname, info in scanner_groups.items():
+        seen: dict[str, dict] = {}
+        for p in info["patterns"]:
+            key = f"{p['unit']}:{p['message'][:60]}"
+            if key in seen:
+                # Accumulate counts
+                try:
+                    existing = int(seen[key]["count"].rstrip("x"))
+                    new = int(p["count"].rstrip("x"))
+                    seen[key]["count"] = f"{existing + new}x"
+                except ValueError:
+                    pass
+            else:
+                seen[key] = dict(p)
+        # Sort by count descending, cap at 10
+        sorted_patterns = sorted(seen.values(),
+                                 key=lambda x: int(x["count"].rstrip("x") or "0"),
+                                 reverse=True)
+        info["patterns"] = sorted_patterns[:10]
 
     # --- Load health sweep diagnostics ---
     diagnostics_dir = rd / "diagnostics"
@@ -372,19 +404,27 @@ def generate_chart(run_dir: str, steps: list[dict] | None = None) -> str:
                                       key=lambda x: ({"critical": 0, "warning": 1, "info": 2}.get(x[1]["severity"], 3))):
                 sev = info["severity"]
                 sev_color = severity_colors.get(sev, "#3498db")
-                detail_preview = info["latest_detail"].replace("\n", " ").replace("  ", " ")[:200]
+                # Build pattern rows
+                pattern_html = ""
+                if info["patterns"]:
+                    for p in info["patterns"][:5]:
+                        unit_badge = f"<span style='color:#4ecca3'>{p['unit']}</span> " if p["unit"] else ""
+                        count_badge = f"<span style='color:#888'>{p['count']}</span> " if p["count"] else ""
+                        pattern_html += f"<div style='font-size:12px;margin:2px 0'>{count_badge}{unit_badge}<span style='color:#ccc'>{p['message'][:120]}</span></div>"
+                else:
+                    pattern_html = "<span style='color:#666'>No patterns extracted</span>"
                 s_rows += (
                     f"<tr>"
                     f"<td style='color:{sev_color};font-weight:bold'>{sev.upper()}</td>"
                     f"<td>{info['title']}</td>"
                     f"<td style='color:#888'>{info['source']}</td>"
                     f"<td>{info['count']}</td>"
-                    f"<td style='color:#999;font-size:12px'>{detail_preview}</td>"
+                    f"<td>{pattern_html}</td>"
                     f"</tr>\n"
                 )
             scanner_section = f"""<h3 style="color:#3498db;margin:16px 0 8px 0;font-size:14px">Proactive Scanner ({len(scanner_findings)} scans, {len(scanner_groups)} query types)</h3>
 <table>
-<tr><th style="text-align:left">Severity</th><th style="text-align:left">Query</th><th>Source</th><th>Scans</th><th style="text-align:left">Latest Detail</th></tr>
+<tr><th style="text-align:left">Severity</th><th style="text-align:left">Query</th><th>Source</th><th>Scans</th><th style="text-align:left">Error Patterns</th></tr>
 {s_rows}
 </table>"""
 

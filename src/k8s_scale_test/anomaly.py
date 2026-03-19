@@ -246,6 +246,38 @@ class AnomalyDetector:
                         diags.append(await self.node_diag.collect(node_name, iid,
                                      extra_commands=extra_cmds))
 
+            # Second-pass KB check — now with SSM diagnostics available.
+            # The first KB check (Layer 1) only had events, so entries with
+            # log_patterns couldn't match. Re-check with full evidence.
+            if self.kb_store is not None and diags:
+                matches = self.kb_matcher.match(events, diags, self.kb_store.load_all())
+                if matches:
+                    best_entry, best_score = matches[0]
+                    log.info("  KB match (post-SSM): %s (score=%.2f)", best_entry.entry_id, best_score)
+                    now = datetime.now(timezone.utc)
+                    finding = Finding(
+                        finding_id=str(uuid.uuid4()),
+                        timestamp=now,
+                        severity=best_entry.severity,
+                        symptom=alert.message,
+                        affected_resources=list({e.involved_object_name for e in events})[:20],
+                        k8s_events=events[:50],
+                        node_metrics=[pn.metrics for pn in condition_problems],
+                        node_diagnostics=diags,
+                        evidence_references=[
+                            f"kb_match:{best_entry.entry_id}",
+                            f"ssm_diags:{len(diags)}",
+                        ],
+                        root_cause=best_entry.root_cause,
+                        resolved=True,
+                    )
+                    self.kb_store.update_occurrence(best_entry.entry_id, now)
+                    self.evidence_store.save_finding(self.run_id, finding)
+                    if alert_span is not None:
+                        alert_span.set_attribute("root_cause", best_entry.root_cause or "")
+                        alert_span.set_attribute("severity", best_entry.severity.value)
+                    return finding
+
             # Correlate everything
             metrics = [pn.metrics for pn in condition_problems]
             finding = self._correlate(alert, events, metrics, diags,
@@ -869,8 +901,33 @@ class AnomalyDetector:
         # --- Pod sandbox / CNI issues ---
         fcps = warning_reasons.get("FailedCreatePodSandBox", 0)
         if fcps > 10:
-            clues.append(f"FailedCreatePodSandBox x{fcps} — VPC CNI failures "
-                         f"(likely MAC collision at high pod density)")
+            # Check SSM logs for MAC collision signature before assuming it
+            mac_collision_confirmed = False
+            for d in diagnostics:
+                for field in ["kubelet_logs", "containerd_logs", "journal_kubelet",
+                              "journal_containerd"]:
+                    r = getattr(d, field, None)
+                    if r and r.status == "Success" and r.output:
+                        low = r.output.lower()
+                        if "failed to generate unique mac" in low or "results may be incomplete" in low:
+                            mac_collision_confirmed = True
+                            break
+                # Also check IPAMD-specific extra commands
+                for attr_name in dir(d):
+                    if attr_name.startswith("_"):
+                        continue
+                    r = getattr(d, attr_name, None)
+                    if hasattr(r, "output") and r and r.output:
+                        low = r.output.lower()
+                        if "failed to generate unique mac" in low:
+                            mac_collision_confirmed = True
+                            break
+
+            if mac_collision_confirmed:
+                clues.append(f"FailedCreatePodSandBox x{fcps} — VPC CNI MAC collision "
+                             f"confirmed in node logs")
+            else:
+                clues.append(f"FailedCreatePodSandBox x{fcps} — VPC CNI pod sandbox failures")
 
         fcpc = warning_reasons.get("FailedCreatePodContainer", 0)
         if fcpc > 0:
