@@ -1,16 +1,13 @@
 {
   "enabled": true,
   "name": "Enforce Engineering Rigor",
-  "description": "Before any code write, verify the change follows engineering-rigor.md: no assumptions without testing, full context understood, trade-offs stated, findings validated before implementation.",
+  "description": "At the start of each prompt, remind the agent to follow engineering-rigor.md principles: no assumptions without testing, full context before changes, surface trade-offs, validate before implementing.",
   "version": "1",
   "when": {
-    "type": "preToolUse",
-    "toolTypes": [
-      "write"
-    ]
+    "type": "promptSubmit"
   },
   "then": {
     "type": "askAgent",
-    "prompt": "Before proceeding with this write, confirm you are following .kiro/steering/engineering-rigor.md:\n\n1. INVESTIGATION: Have you formed a testable hypothesis and tried to prove it wrong? State what you tested.\n2. CONTEXT: Have you read the callers, tests, and config for the code you're changing? If unsure, check source code or documentation first.\n3. COMMUNICATION: Are there trade-offs or inconsistencies to surface?\n4. EXECUTION: Have you validated findings before writing code? Did you present analysis and get confirmation first?\n\nIf any answer is no, stop the write and do the missing work first. Do not skip steps to save time."
+    "prompt": "Before starting work on this request, recall the principles in .kiro/steering/engineering-rigor.md:\n\n- INVESTIGATION: Form testable hypotheses. Try to prove yourself wrong before accepting.\n- CONTEXT: Read callers, tests, and config before changing code. Ask if ambiguous.\n- COMMUNICATION: Surface inconsistencies and trade-offs. Push back if something doesn't make sense.\n- EXECUTION: Validate findings before writing code. Don't bypass test failures.\n\nKeep these in mind throughout your response. Do not repeat them back to the user."
   }
 }

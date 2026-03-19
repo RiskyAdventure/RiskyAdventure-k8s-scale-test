@@ -9,7 +9,7 @@ The VPC CNI plugin fails to create pod sandboxes during rapid pod scaling becaus
 - EKS cluster: Wesley beta, `tf-shane` (us-west-2)
 - Node AMI: AL2023 (Karpenter-provisioned)
 - Kernel: 6.x (AL2023 default)
-- VPC CNI version: **v1.20.4** (confirmed via DaemonSet labels and binary inspection on node)
+- VPC CNI version: **v1.20.4** → upgraded to **v1.21.1** (see Validation section)
 - Kubernetes version: 1.31+
 
 ## Reproduction
