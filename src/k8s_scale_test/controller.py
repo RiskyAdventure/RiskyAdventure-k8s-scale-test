@@ -427,7 +427,7 @@ class ScaleTestController:
         # Launch an independent observer process that counts actual Running
         # pods via the pod list API — a completely different data path from
         # the monitor's deployment watch. Used for post-run cross-validation.
-        observer_proc = await self._start_observer(run_id, namespaces)
+        observer_proc = await self._start_observer(run_id, namespaces, amp_collector)
 
         # ── Phase 6a: Observability Scanner ────────────────────────────
         # Create and start the proactive scanner if at least one backend
@@ -943,14 +943,19 @@ class ScaleTestController:
             halt_reason=None if ready >= target else "target_not_reached",
         )
 
-    async def _start_observer(self, run_id: str, namespaces: list[str]):
+    async def _start_observer(self, run_id: str, namespaces: list[str], amp_collector=None):
         """Launch an independent observer that counts actual Running pods.
 
         The monitor uses the K8s Deployment watch API (.status.readyReplicas).
-        The observer uses a completely different data path — it lists actual
-        pods via the pod API and counts those in Running phase. This catches
-        discrepancies between what the deployment controller reports and what's
-        actually running on the cluster.
+        The observer uses a completely different data path to cross-check:
+
+        - **AMP mode** (preferred): queries kube_pod_status_phase via PromQL.
+          One ~200-byte HTTP response regardless of pod count. kube-state-metrics
+          scrapes pod state independently from the K8s API server, so this is
+          a genuinely independent data path.
+        - **Pod list fallback**: lists actual pods via the K8s pod API with
+          limit=5000 pagination. At 30K+ pods the ~28MB responses frequently
+          fail with IncompleteRead, making this unreliable at scale.
 
         Polls every 10s (offset from the monitor's 5s tick) to avoid
         synchronized API pressure.
@@ -963,45 +968,40 @@ class ScaleTestController:
 
         obs_file.write_text("timestamp,namespace running pending total\n")
 
+        use_amp = amp_collector is not None
+        if use_amp:
+            log.info("Observer: using AMP/PromQL mode (kube_pod_status_phase)")
+        else:
+            log.info("Observer: using pod-list fallback (AMP not available)")
+
         try:
             import threading
 
             def _poller():
                 consecutive_errors = 0
-                v1 = self.k8s_client.CoreV1Api()
+                # Pod-list fallback needs a K8s API client
+                v1 = None if use_amp else self.k8s_client.CoreV1Api()
+
+                # Build the PromQL query for AMP mode
+                if use_amp:
+                    ns_regex = "|".join(ns_list)
+                    promql = (
+                        f'count by (phase) '
+                        f'(kube_pod_status_phase{{namespace=~"{ns_regex}"}} == 1)'
+                    )
+
                 try:
                     with open(obs_file, "a") as fh:
                         while self._running:
                             try:
-                                total_running = 0
-                                total_pending = 0
-                                total_all = 0
-                                for ns in ns_list:
-                                    # Paginate with limit=5000 to avoid 80-130MB
-                                    # single responses that cause IncompleteRead.
-                                    # Use (connect, read) timeout tuple — 60s read
-                                    # is needed for large paginated responses.
-                                    _continue = None
-                                    while True:
-                                        kwargs = dict(
-                                            watch=False,
-                                            _request_timeout=(5, 60),
-                                            field_selector="status.phase!=Succeeded,status.phase!=Failed",
-                                            limit=5000,
-                                        )
-                                        if _continue:
-                                            kwargs["_continue"] = _continue
-                                        pods = v1.list_namespaced_pod(ns, **kwargs)
-                                        for pod in pods.items:
-                                            phase = pod.status.phase if pod.status else ""
-                                            total_all += 1
-                                            if phase == "Running":
-                                                total_running += 1
-                                            elif phase == "Pending":
-                                                total_pending += 1
-                                        _continue = pods.metadata._continue
-                                        if not _continue:
-                                            break
+                                if use_amp:
+                                    total_running, total_pending, total_all = (
+                                        self._observer_poll_amp(amp_collector, promql)
+                                    )
+                                else:
+                                    total_running, total_pending, total_all = (
+                                        self._observer_poll_podlist(v1, ns_list)
+                                    )
                                 ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
                                 fh.write(f"{ts},all {total_running} {total_pending} {total_all}\n")
                                 fh.flush()
@@ -1009,8 +1009,8 @@ class ScaleTestController:
                             except Exception as e:
                                 consecutive_errors += 1
                                 err_str = str(e)
-                                # Refresh K8s token on auth errors
-                                if any(x in err_str for x in ("Unauthorized", "401", "ExpiredToken")):
+                                # Refresh K8s token on auth errors (pod-list mode)
+                                if not use_amp and any(x in err_str for x in ("Unauthorized", "401", "ExpiredToken")):
                                     if hasattr(self.config, '_k8s_reload'):
                                         try:
                                             self.config._k8s_reload()
@@ -1026,12 +1026,72 @@ class ScaleTestController:
 
             t = threading.Thread(target=_poller, daemon=True)
             t.start()
-            log.info("Observer started: pod-list poll every 10s across %d namespace(s) → %s",
-                     len(ns_list), obs_file)
+            mode = "AMP/PromQL" if use_amp else "pod-list"
+            log.info("Observer started: %s poll every 10s across %d namespace(s) → %s",
+                     mode, len(ns_list), obs_file)
             return _ObserverHandle(t)
         except Exception as exc:
             log.warning("Observer failed to start: %s", exc)
             return None
+
+    @staticmethod
+    def _observer_poll_amp(amp_collector, promql: str) -> tuple[int, int, int]:
+        """Execute a single AMP-based observer poll.
+
+        Runs the PromQL query synchronously (blocking) since the observer
+        runs in its own thread. Returns (running, pending, total).
+        """
+        import asyncio as _aio
+
+        loop = _aio.new_event_loop()
+        try:
+            raw = loop.run_until_complete(amp_collector._query_promql(promql))
+        finally:
+            loop.close()
+
+        running = pending = total = 0
+        results = raw.get("data", {}).get("result", [])
+        for r in results:
+            phase = r.get("metric", {}).get("phase", "")
+            count = int(float(r.get("value", [0, "0"])[1]))
+            if phase == "Running":
+                running = count
+            elif phase == "Pending":
+                pending = count
+            total += count
+        return running, pending, total
+
+    @staticmethod
+    def _observer_poll_podlist(v1, ns_list: list[str]) -> tuple[int, int, int]:
+        """Execute a single pod-list-based observer poll.
+
+        Paginates with limit=5000 to avoid massive single responses.
+        Returns (running, pending, total).
+        """
+        total_running = total_pending = total_all = 0
+        for ns in ns_list:
+            _continue = None
+            while True:
+                kwargs = dict(
+                    watch=False,
+                    _request_timeout=(5, 60),
+                    field_selector="status.phase!=Succeeded,status.phase!=Failed",
+                    limit=5000,
+                )
+                if _continue:
+                    kwargs["_continue"] = _continue
+                pods = v1.list_namespaced_pod(ns, **kwargs)
+                for pod in pods.items:
+                    phase = pod.status.phase if pod.status else ""
+                    total_all += 1
+                    if phase == "Running":
+                        total_running += 1
+                    elif phase == "Pending":
+                        total_pending += 1
+                _continue = pods.metadata._continue
+                if not _continue:
+                    break
+        return total_running, total_pending, total_all
 
     @staticmethod
     def _stop_observer(proc):
