@@ -13,7 +13,7 @@ from datetime import datetime, timezone
 from typing import Callable
 
 from k8s_scale_test.evidence import EvidenceStore
-from k8s_scale_test.models import K8sEvent
+from k8s_scale_test.models import Finding, K8sEvent
 
 log = logging.getLogger(__name__)
 
@@ -161,3 +161,91 @@ class EventWatcher:
                     log.info("EventWatcher: K8s token refreshed")
                 except Exception as e:
                     log.warning("EventWatcher: token refresh failed: %s", e)
+
+    def get_warning_summary(self) -> dict[str, dict]:
+        """Return {reason: {count, sample_message, kind}} for all warning reasons.
+
+        Reads from the EvidenceStore's events.jsonl file to get complete event data.
+        Groups Warning events by reason and returns count, a sample message, and
+        the involved object kind for each reason.
+
+        Returns empty dict if no warning events exist or if events.jsonl is missing.
+        """
+        import json
+
+        events_path = (
+            self.evidence_store._run_dir(self._run_id) / "events.jsonl"
+        )
+        if not events_path.exists():
+            return {}
+
+        summary: dict[str, dict] = {}
+        with open(events_path, "r") as fh:
+            for line in fh:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    ev = json.loads(line)
+                except Exception:
+                    log.warning("Skipping malformed JSONL line in events.jsonl")
+                    continue
+
+                if ev.get("event_type") != "Warning":
+                    continue
+
+                reason = ev.get("reason", "")
+                if not reason:
+                    continue
+
+                if reason not in summary:
+                    summary[reason] = {
+                        "count": 0,
+                        "sample_message": ev.get("message", ""),
+                        "kind": ev.get("involved_object_kind", ""),
+                    }
+                summary[reason]["count"] += 1
+
+        return summary
+
+    def get_uncovered_reasons(
+        self, findings: list[Finding], threshold: int = 100
+    ) -> list[tuple[str, dict]]:
+        """Return warning reasons with >threshold events not covered by any finding.
+
+        Cross-references warning_summary against findings' evidence_references
+        and k8s_events to identify reasons that were never investigated.
+
+        Uses the same cross-referencing logic as chart.py:
+        - Checks evidence_references for "warnings:Reason=N" patterns
+        - Checks k8s_events for matching reason strings
+
+        Returns list of (reason, info_dict) tuples sorted by count descending.
+        """
+        summary = self.get_warning_summary()
+        if not summary:
+            return []
+
+        # Collect all warning reasons mentioned in any finding's evidence,
+        # mirroring the logic in chart.py's "Investigated?" column.
+        covered_reasons: set[str] = set()
+        for f in findings:
+            for ev_ref in f.evidence_references:
+                if ev_ref.startswith("warnings:"):
+                    # Parse "warnings:FailedScheduling=9914,FailedCreatePodSandBox=239"
+                    for pair in ev_ref[len("warnings:"):].split(","):
+                        reason = pair.split("=")[0]
+                        if reason:
+                            covered_reasons.add(reason)
+            # Also check k8s_events in the finding itself
+            for ev in f.k8s_events:
+                if ev.reason:
+                    covered_reasons.add(ev.reason)
+
+        uncovered = [
+            (reason, info)
+            for reason, info in summary.items()
+            if info["count"] > threshold and reason not in covered_reasons
+        ]
+        uncovered.sort(key=lambda x: -x[1]["count"])
+        return uncovered

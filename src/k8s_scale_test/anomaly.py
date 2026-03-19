@@ -46,7 +46,7 @@ from k8s_scale_test.kb_matcher import SignatureMatcher
 from k8s_scale_test.kb_store import KBStore
 from k8s_scale_test.metrics import NodeMetricsAnalyzer
 from k8s_scale_test.models import (
-    Alert, Finding, K8sEvent, NodeDiagnostic, NodeMetric,
+    Alert, AlertType, Finding, K8sEvent, NodeDiagnostic, NodeMetric,
     ProblemNode, Severity, TestConfig,
 )
 from k8s_scale_test.shared_context import match_findings
@@ -138,6 +138,8 @@ class AnomalyDetector:
         Finding
             The investigation result, persisted to the evidence store.
         """
+        if alert.alert_type == AlertType.EVENT_ANALYSIS:
+            log.info("Post-test event analysis: %s", alert.message)
         log.info("Investigating: %s", alert.message)
         ns_list = alert.context.get("namespaces", ["default"])
         window = timedelta(minutes=self.config.event_time_window_minutes)
@@ -174,7 +176,7 @@ class AnomalyDetector:
                     log.info("  KB match: %s (score=%.2f)", best_entry.entry_id, best_score)
                     now = datetime.now(timezone.utc)
                     finding = Finding(
-                        finding_id=str(uuid.uuid4()),
+                        finding_id=f"finding-{uuid.uuid4().hex[:8]}",
                         timestamp=now,
                         severity=best_entry.severity,
                         symptom=alert.message,
@@ -256,7 +258,7 @@ class AnomalyDetector:
                     log.info("  KB match (post-SSM): %s (score=%.2f)", best_entry.entry_id, best_score)
                     now = datetime.now(timezone.utc)
                     finding = Finding(
-                        finding_id=str(uuid.uuid4()),
+                        finding_id=f"finding-{uuid.uuid4().hex[:8]}",
                         timestamp=now,
                         severity=best_entry.severity,
                         symptom=alert.message,

@@ -530,6 +530,29 @@ class ScaleTestController:
                     {"sampled": sampled, "healthy": healthy,
                      "issues": sweep_issues[:10]},
                 )
+
+            # 7c. Post-test event analysis — investigate uncovered warning patterns
+            uncovered = watcher.get_uncovered_reasons(self._findings, threshold=100)
+            if uncovered:
+                log.info("Post-test event analysis: %d uncovered warning reason(s)", len(uncovered))
+            for reason, info in uncovered[:3]:
+                try:
+                    alert = Alert(
+                        alert_type=AlertType.EVENT_ANALYSIS,
+                        timestamp=datetime.now(timezone.utc),
+                        message=f"Post-test analysis: {reason} x{info['count']}",
+                        context={
+                            "reason": reason,
+                            "count": info["count"],
+                            "sample": info["sample_message"],
+                            "namespaces": namespaces,
+                        },
+                    )
+                    finding = await anomaly.handle_alert(alert)
+                    self._findings.append(finding)
+                    log.info("  %s: %s", reason, finding.root_cause or "inconclusive")
+                except Exception as exc:
+                    log.error("Event analysis failed for %s: %s", reason, exc)
         finally:
             # ALWAYS stop monitoring — even if scaling, hold, or sweep threw
             self._running = False  # Signal observer thread to exit

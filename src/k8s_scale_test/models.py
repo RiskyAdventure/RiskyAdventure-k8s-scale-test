@@ -115,6 +115,7 @@ class AlertType(Enum):
     PENDING_TIMEOUT = "pending_timeout"
     NODE_NOT_READY = "node_not_ready"
     MONITOR_GAP = "monitor_gap"
+    EVENT_ANALYSIS = "event_analysis"
 
 
 class Severity(Enum):
