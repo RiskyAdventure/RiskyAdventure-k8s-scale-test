@@ -5,6 +5,8 @@ Produces a self-contained HTML file with an interactive chart showing:
 - Cumulative ready count over time
 - Pending count over time
 - Scaling step markers
+- Investigation summary: anomaly findings with root causes, scanner results,
+  K8s warning events, and diagnostic collection notes
 """
 
 from __future__ import annotations
@@ -235,12 +237,174 @@ def generate_chart(run_dir: str, steps: list[dict] | None = None) -> str:
     error_table = ""
     if error_rows:
         transient_note = f"<div class='note'>{transient_count:,} FailedScheduling events filtered (expected during node provisioning)</div>" if transient_count else ""
-        error_table = f"""<div class="chart-box">
-<table>
-<tr><th style="text-align:left">Error</th><th>Count</th><th>Object</th><th style="text-align:left">Sample Message</th></tr>
+        error_table = f"""<table>
+<tr><th style="text-align:left">Warning Reason</th><th>Count</th><th>Object</th><th style="text-align:left">Sample Message</th></tr>
 {error_rows}
 </table>
-{transient_note}
+{transient_note}"""
+
+    # --- Load anomaly detector findings (finding-*.json) ---
+    anomaly_findings = []
+    if findings_dir.exists():
+        for f in sorted(findings_dir.glob("finding-*.json")):
+            try:
+                anomaly_findings.append(json.loads(f.read_text()))
+            except Exception:
+                pass
+
+    # Deduplicate findings by root_cause — same investigation can fire multiple times
+    deduped_findings: dict[str, dict] = {}
+    for af in anomaly_findings:
+        rc = af.get("root_cause") or af.get("symptom", "Unknown")
+        if rc not in deduped_findings:
+            deduped_findings[rc] = {
+                "root_cause": rc,
+                "severity": af.get("severity", "info"),
+                "symptom": af.get("symptom", ""),
+                "evidence": af.get("evidence_references", []),
+                "affected_count": len(af.get("affected_resources", [])),
+                "has_diagnostics": bool(af.get("node_diagnostics")),
+                "has_metrics": bool(af.get("node_metrics")),
+                "occurrences": 1,
+                "timestamps": [af.get("timestamp", "")],
+            }
+        else:
+            deduped_findings[rc]["occurrences"] += 1
+            deduped_findings[rc]["timestamps"].append(af.get("timestamp", ""))
+            # Keep the higher severity
+            sev_order = {"critical": 3, "warning": 2, "info": 1}
+            if sev_order.get(af.get("severity", "info"), 0) > sev_order.get(deduped_findings[rc]["severity"], 0):
+                deduped_findings[rc]["severity"] = af.get("severity", "info")
+            # Merge affected resource counts
+            deduped_findings[rc]["affected_count"] = max(
+                deduped_findings[rc]["affected_count"],
+                len(af.get("affected_resources", [])),
+            )
+
+    # --- Load scanner findings (scanner_findings.jsonl) ---
+    scanner_findings_file = rd / "scanner_findings.jsonl"
+    scanner_findings: list[dict] = []
+    if scanner_findings_file.exists():
+        try:
+            for line in scanner_findings_file.read_text().splitlines():
+                if line.strip():
+                    scanner_findings.append(json.loads(line))
+        except Exception:
+            pass
+
+    # Group scanner findings by query_name, keep latest per group
+    scanner_groups: dict[str, dict] = {}
+    for sf in scanner_findings:
+        qname = sf.get("query_name", "unknown")
+        sev = sf.get("severity", "info")
+        if qname not in scanner_groups:
+            scanner_groups[qname] = {
+                "title": sf.get("title", qname),
+                "severity": sev,
+                "source": sf.get("source", ""),
+                "count": 1,
+                "latest_detail": sf.get("detail", "")[:300],
+            }
+        else:
+            scanner_groups[qname]["count"] += 1
+            scanner_groups[qname]["latest_detail"] = sf.get("detail", "")[:300]
+            sev_order = {"critical": 3, "warning": 2, "info": 1}
+            if sev_order.get(sev, 0) > sev_order.get(scanner_groups[qname]["severity"], 0):
+                scanner_groups[qname]["severity"] = sev
+
+    # --- Load health sweep diagnostics ---
+    diagnostics_dir = rd / "diagnostics"
+    diag_count = 0
+    if diagnostics_dir.exists():
+        diag_count = len(list(diagnostics_dir.glob("*.json")))
+
+    # --- Build the Investigation Summary HTML ---
+    investigation_html = ""
+    has_investigation_data = deduped_findings or scanner_groups or error_rows
+
+    if has_investigation_data:
+        # Root cause findings section
+        findings_section = ""
+        if deduped_findings:
+            f_rows = ""
+            for rc, info in sorted(deduped_findings.items(),
+                                   key=lambda x: ({"critical": 0, "warning": 1, "info": 2}.get(x[1]["severity"], 3), -x[1]["occurrences"])):
+                sev = info["severity"]
+                sev_color = severity_colors.get(sev, "#3498db")
+                occ_badge = f" <span style='color:#888;font-size:11px'>(×{info['occurrences']})</span>" if info["occurrences"] > 1 else ""
+                evidence_str = ", ".join(info["evidence"][:3]) if info["evidence"] else "—"
+                layers = []
+                if info["has_diagnostics"]:
+                    layers.append("SSM")
+                if info["has_metrics"]:
+                    layers.append("Metrics")
+                if info["evidence"]:
+                    for ev in info["evidence"]:
+                        if ev.startswith("pods:"):
+                            layers.append("Pods")
+                        elif ev.startswith("warnings:"):
+                            layers.append("Events")
+                        elif ev.startswith("kb_match:"):
+                            layers.append("KB")
+                layers_str = ", ".join(sorted(set(layers))) if layers else "Events"
+
+                f_rows += (
+                    f"<tr>"
+                    f"<td style='color:{sev_color};font-weight:bold;white-space:nowrap'>{sev.upper()}{occ_badge}</td>"
+                    f"<td style='color:#ccc'>{info['symptom'][:120]}</td>"
+                    f"<td style='color:#e0e0e0;font-weight:500'>{rc[:200]}</td>"
+                    f"<td style='color:#888;font-size:12px'>{evidence_str}</td>"
+                    f"<td style='color:#888;font-size:12px'>{layers_str}</td>"
+                    f"<td>{info['affected_count']}</td>"
+                    f"</tr>\n"
+                )
+            findings_section = f"""<h3 style="color:#e94560;margin:16px 0 8px 0;font-size:14px">Anomaly Investigations ({len(anomaly_findings)} triggered, {len(deduped_findings)} unique root causes)</h3>
+<table>
+<tr><th style="text-align:left">Severity</th><th style="text-align:left">Symptom</th><th style="text-align:left">Root Cause</th><th style="text-align:left">Evidence</th><th style="text-align:left">Layers</th><th>Resources</th></tr>
+{f_rows}
+</table>"""
+
+        # Scanner findings section
+        scanner_section = ""
+        if scanner_groups:
+            s_rows = ""
+            for qname, info in sorted(scanner_groups.items(),
+                                      key=lambda x: ({"critical": 0, "warning": 1, "info": 2}.get(x[1]["severity"], 3))):
+                sev = info["severity"]
+                sev_color = severity_colors.get(sev, "#3498db")
+                detail_preview = info["latest_detail"].replace("\n", " ").replace("  ", " ")[:200]
+                s_rows += (
+                    f"<tr>"
+                    f"<td style='color:{sev_color};font-weight:bold'>{sev.upper()}</td>"
+                    f"<td>{info['title']}</td>"
+                    f"<td style='color:#888'>{info['source']}</td>"
+                    f"<td>{info['count']}</td>"
+                    f"<td style='color:#999;font-size:12px'>{detail_preview}</td>"
+                    f"</tr>\n"
+                )
+            scanner_section = f"""<h3 style="color:#3498db;margin:16px 0 8px 0;font-size:14px">Proactive Scanner ({len(scanner_findings)} scans, {len(scanner_groups)} query types)</h3>
+<table>
+<tr><th style="text-align:left">Severity</th><th style="text-align:left">Query</th><th>Source</th><th>Scans</th><th style="text-align:left">Latest Detail</th></tr>
+{s_rows}
+</table>"""
+
+        # K8s events section (moved here from standalone)
+        events_section = ""
+        if error_rows:
+            events_section = f"""<h3 style="color:#f39c12;margin:16px 0 8px 0;font-size:14px">K8s Warning Events</h3>
+{error_table}"""
+
+        # Diagnostics note
+        diag_note = ""
+        if diag_count > 0:
+            diag_note = f"<div class='note' style='margin-top:8px'>{diag_count} node diagnostic snapshot(s) collected via SSM (kubelet, containerd, IPAMD logs)</div>"
+
+        investigation_html = f"""<div class="chart-box">
+<h2 style="color:#e94560;margin-top:0">Investigation Summary</h2>
+{findings_section}
+{scanner_section}
+{events_section}
+{diag_note}
 </div>"""
 
     # --- CL2 preload section (plan + actual object counts only) ---
@@ -519,7 +683,7 @@ new Chart(document.getElementById('countChart'), {
 </div>
 """
 
-    html += agent_findings_html + error_table + """
+    html += agent_findings_html + investigation_html + """
 
 </body></html>"""
 
